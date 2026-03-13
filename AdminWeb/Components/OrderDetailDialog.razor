@@ -1,0 +1,291 @@
+@using DAL.DTOs.Orders.Res
+@inject AdminWeb.Services.ToastService Toast
+@inject IJSRuntime JS
+
+@if (Show)
+{
+    <div class="order-modal-overlay" @onclick="@(() => HandleClose())" 
+         style="position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; background: rgba(0, 0, 0, 0.6) !important; backdrop-filter: blur(4px); display: flex !important; align-items: center !important; justify-content: center !important; z-index: 99999 !important; padding: 1rem !important; overflow-y: auto !important;">
+        <div class="order-modal" @onclick:stopPropagation 
+             style="background: white !important; border-radius: 12px; width: 100%; max-width: 750px; max-height: 85vh; display: flex !important; flex-direction: column !important; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); margin: auto !important; position: relative;">
+            @if (IsLoading || Order == null)
+            {
+                <div class="order-modal-body" style="display:flex;align-items:center;justify-content:center;min-height:300px;">
+                    <div class="loader"></div>
+                    <span style="margin-left:12px;color:#4b5563;">Đang tải chi tiết đơn hàng...</span>
+                </div>
+            }
+            else
+            {
+                <!-- Header -->
+                <div class="order-modal-header" style="flex-shrink: 0;">
+                    <div>
+                        <h2>Chi tiết đơn hàng</h2>
+                        <span class="order-code">@Order.OrderCode</span>
+                    </div>
+                    <button class="btn-modal-close" @onclick="HandleClose">×</button>
+                </div>
+
+                <!-- Body with scroll -->
+                <div class="order-modal-body" style="flex: 1; overflow-y: auto; overflow-x: hidden; max-height: calc(85vh - 170px);">
+                    <!-- Timeline -->
+                    <div class="order-section">
+                        <div class="section-header">
+                            <h3>Trạng thái đơn hàng</h3>
+                        </div>
+                        <div class="timeline">
+                            @foreach (var history in Order.StatusHistory.OrderByDescending(h => h.ChangedAt))
+                            {
+                                <div class="timeline-item @(history.Status == Order.Status ? "active" : "")">
+                                    <div class="timeline-dot"></div>
+                                    <div class="timeline-content">
+                                        <div class="timeline-title">@history.StatusText</div>
+                                        <div class="timeline-meta">
+                                            <span>@history.ChangedAt.ToString("dd/MM/yyyy HH:mm")</span>
+                                            <span>@history.UpdatedBy</span>
+                                        </div>
+                                        @if (!string.IsNullOrEmpty(history.Note))
+                                        {
+                                            <div class="timeline-note">@history.Note</div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Customer & Shipping Info -->
+                    <div class="order-grid">
+                        <div class="order-section">
+                            <div class="section-header">
+                                <h3>Khách hàng</h3>
+                            </div>
+                            <div class="info-list">
+                                <div class="info-item">
+                                    <span class="label">Họ tên:</span>
+                                    <span class="value">@Order.Customer.FullName</span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="label">Email:</span>
+                                    <span class="value">@Order.Customer.Email</span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="label">Điện thoại:</span>
+                                    <span class="value">@Order.Customer.Phone</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="order-section">
+                            <div class="section-header">
+                                <h3>Giao hàng</h3>
+                            </div>
+                            <div class="info-list">
+                                <div class="info-item">
+                                    <span class="label">Người nhận:</span>
+                                    <span class="value">@Order.ShippingInfo.ReceiverName</span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="label">SĐT:</span>
+                                    <span class="value">@Order.ShippingInfo.ReceiverPhone</span>
+                                </div>
+                                <div class="info-item full">
+                                    <span class="label">Địa chỉ:</span>
+                                    <span class="value">@Order.ShippingInfo.FullAddress</span>
+                                </div>
+                                @if (!string.IsNullOrEmpty(Order.ShippingInfo.Note))
+                                {
+                                    <div class="info-item full">
+                                        <span class="label">Ghi chú:</span>
+                                        <span class="value text-muted">@Order.ShippingInfo.Note</span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Payment Info -->
+                    <div class="order-section">
+                        <div class="section-header">
+                            <h3>Thanh toán</h3>
+                        </div>
+                        <div class="info-list">
+                            <div class="info-item">
+                                <span class="label">Phương thức:</span>
+                                <span class="value"><span class="badge badge-info">@Order.Payment.PaymentMethodText</span></span>
+                            </div>
+                            <div class="info-item">
+                                <span class="label">Trạng thái:</span>
+                                <span class="value">
+                                    <span class="badge @GetPaymentStatusClass(Order.Payment.PaymentStatus)">
+                                        @Order.Payment.PaymentStatusText
+                                    </span>
+                                </span>
+                            </div>
+                            @if (Order.Payment.PaidAt.HasValue)
+                            {
+                                <div class="info-item">
+                                    <span class="label">Đã thanh toán:</span>
+                                    <span class="value">@Order.Payment.PaidAt.Value.ToString("dd/MM/yyyy HH:mm")</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Products -->
+                    <div class="order-section">
+                        <div class="section-header">
+                            <h3>Sản phẩm (@(Order.Items?.Count ?? 0))</h3>
+                        </div>
+                        @if (Order.Items != null && Order.Items.Any())
+                        {
+                            <div class="product-list">
+                                @foreach (var item in Order.Items)
+                                {
+                                    <div class="product-card">
+                                        <img src="@item.ImageUrl" alt="@item.ProductName" class="product-img" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27400%27 height=%27400%27 viewBox=%270 0 400 400%27%3E%3Crect width=%27400%27 height=%27400%27 fill=%27%23f3f4f6%27/%3E%3Cg transform=%27translate(200,200)%27%3E%3Cpath d=%27M-50-25 L50-25 L50,25 L-50,25 Z M-30-5 L30-5 L30,5 L-30,5 Z%27 fill=%27%239ca3af%27 opacity=%270.3%27/%3E%3Ccircle cx=%27-20%27 cy=%27-10%27 r=%278%27 fill=%27%239ca3af%27 opacity=%270.3%27/%3E%3Cpath d=%27M-40,10 L-25,-5 L-10,10 M0,10 L15,-5 L30,10%27 stroke=%27%239ca3af%27 stroke-width=%273%27 fill=%27none%27 opacity=%270.3%27/%3E%3C/g%3E%3Ctext x=%27200%27 y=%27250%27 font-family=%27Arial, sans-serif%27 font-size=%2716%27 fill=%27%236b7280%27 text-anchor=%27middle%27%3ENo Image%3C/text%3E%3C/svg%3E'">
+                                        <div class="product-info">
+                                            <div class="product-name">@item.ProductName</div>
+                                            <div class="product-brand">@item.BrandName</div>
+                                            <div class="product-meta">
+                                                <span>Màu: @item.ColorName</span>
+                                                <span>•</span>
+                                                <span>Size: @item.SizeName</span>
+                                            </div>
+                                            <div class="product-price-row">
+                                                <span class="product-qty">SL: @item.Quantity</span>
+                                                <span class="product-unit-price">@item.UnitPrice.ToString("N0")₫</span>
+                                            </div>
+                                        </div>
+                                        <div class="product-total">
+                                            @item.Subtotal.ToString("N0")₫
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div style="padding: 20px; text-align: center; color: #6b7280;">
+                                Không có sản phẩm nào trong đơn hàng này
+                            </div>
+                        }
+                    </div>
+
+                    <!-- Summary -->
+                    <div class="order-section">
+                        <div class="section-header">
+                            <h3>Tổng kết</h3>
+                        </div>
+                        <div class="summary-box">
+                            <div class="summary-row">
+                                <span>Tạm tính</span>
+                                <span>@Order.Summary.Subtotal.ToString("N0")₫</span>
+                            </div>
+                            <div class="summary-row">
+                                <span>Phí vận chuyển</span>
+                                <span>@Order.Summary.ShippingFee.ToString("N0")₫</span>
+                            </div>
+                            @if (Order.Summary.Discount > 0)
+                            {
+                                <div class="summary-row discount">
+                                    <span>Giảm giá
+                                        @if (Order.Voucher != null && !string.IsNullOrEmpty(Order.Voucher.VoucherCode))
+                                        {
+                                            <small>(@Order.Voucher.VoucherCode)</small>
+                                        }
+                                    </span>
+                                    <span>-@Order.Summary.Discount.ToString("N0")₫</span>
+                                </div>
+                            }
+                            <div class="summary-divider"></div>
+                            <div class="summary-row total">
+                                <span>Tổng cộng</span>
+                                <span>@Order.Summary.TotalAmount.ToString("N0")₫</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(Order.Note))
+                    {
+                        <div class="order-section">
+                            <div class="section-header">
+                                <h3>Ghi chú</h3>
+                            </div>
+                            <div class="note-box">
+                                @Order.Note
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <!-- Footer -->
+                <div class="order-modal-footer" style="flex-shrink: 0; border-top: 1px solid #e5e7eb; background: white; border-radius: 0 0 16px 16px;">
+                    <button class="btn btn-light" @onclick="HandleClose">Đóng</button>
+                    @if (Order.Status == 0)
+                    {
+                        <button class="btn btn-success" @onclick="HandleConfirm">Xác nhận đơn hàng</button>
+                        <button class="btn btn-danger" @onclick="HandleCancel">Hủy đơn hàng</button>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Show { get; set; }
+    [Parameter] public AdminOrderDetail? Order { get; set; }
+    [Parameter] public bool IsLoading { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnStatusChanged { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Show)
+        {
+            await JS.InvokeVoidAsync("eval", @"
+                document.body.style.overflow = 'hidden';
+            ");
+            if (!IsLoading && Order != null)
+            {
+                await JS.InvokeVoidAsync("eval", "const modalBody = document.querySelector('.order-modal-body'); if (modalBody) { modalBody.scrollTop = 0; }");
+            }
+        }
+        else if (!Show)
+        {
+            await JS.InvokeVoidAsync("eval", "document.body.style.overflow = 'auto';");
+        }
+    }
+
+    private async Task HandleClose()
+    {
+        await JS.InvokeVoidAsync("eval", "document.body.style.overflow = 'auto';");
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task HandleConfirm()
+    {
+        await JS.InvokeVoidAsync("eval", "document.body.style.overflow = 'auto';");
+        Toast.Success("Đã xác nhận đơn hàng");
+        await OnStatusChanged.InvokeAsync();
+        await HandleClose();
+    }
+
+    private async Task HandleCancel()
+    {
+        await JS.InvokeVoidAsync("eval", "document.body.style.overflow = 'auto';");
+        Toast.Error("Đã hủy đơn hàng");
+        await OnStatusChanged.InvokeAsync();
+        await HandleClose();
+    }
+
+    private string GetPaymentStatusClass(int status) => status switch
+    {
+        0 => "badge-warning",
+        1 => "badge-success",
+        2 => "badge-info",
+        3 => "badge-danger",
+        _ => "badge-secondary"
+    };
+}

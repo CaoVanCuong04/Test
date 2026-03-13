@@ -1,0 +1,423 @@
+@using WebUI.Models
+@using WebUI.Services
+@inject CartService CartService
+@inject IJSRuntime JSRuntime
+
+@if (IsVisible)
+{
+    <div class="modal-overlay" @onclick="OnBackdropClick" @ref="modalOverlayRef">
+        <div class="modal-shell" role="dialog" aria-modal="true" @onclick:stopPropagation="true" @ref="modalShellRef">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold">
+                    <i class="fas fa-shopping-bag text-primary me-2"></i>
+                    Chọn Size & Màu Sắc
+                </h5>
+                <button type="button" class="btn-close" @onclick="CloseModal" aria-label="Đóng"></button>
+            </div>
+
+            @if (Product != null)
+            {
+                <div class="modal-body pt-2">
+                    <div class="row g-4 align-items-center mb-1">
+                        <div class="col-md-5">
+                            <div class="product-preview">
+                                @if (IsCurrentSelectionOutOfStock())
+                                {
+                                    <span class="modal-out-of-stock-badge">
+                                        Hết hàng
+                                    </span>
+                                }
+                                <img src="@CurrentImageUrl"
+                                     alt="@Product.Name"
+                                     class="product-preview__image"
+                                     onerror="this.src='@Product.ImageUrl'" />
+                            </div>
+                        </div>
+                        <div class="col-md-7">
+                            <div class="product-summary">
+                                <h6 class="product-summary__name">@Product.Name</h6>
+                                <p class="product-summary__brand">@Product.Brand</p>
+                                <div class="product-summary__pricing">
+                                    <span class="current">@Product.PriceFormatted</span>
+                                    @if (Product.OriginalPrice.HasValue)
+                                    {
+                                        <span class="original">@Product.OldPriceFormatted</span>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="selector-group">
+                        <label class="selector-label">
+                            <i class="fas fa-ruler"></i>
+                            Chọn size
+                            @if (!string.IsNullOrEmpty(SelectedSize) && !string.IsNullOrEmpty(SelectedColor))
+                            {
+                                var stock = GetStockForSizeAndColor(SelectedSize, SelectedColor);
+                                if (stock > 0)
+                                {
+                                    <span style="color: #059669; font-size: 0.85em; font-weight: 600; margin-left: 8px;">
+                                        (@stock còn lại)
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span style="color: #dc3545; font-size: 0.85em; font-weight: 600; margin-left: 8px;">
+                                        (Hết hàng)
+                                    </span>
+                                }
+                            }
+                        </label>
+                        <div class="selector-grid">
+                            @foreach (var size in AvailableSizes)
+                            {
+                                <button type="button"
+                                        class="chip @(SelectedSize == size ? "chip--active" : null)"
+                                        @onclick="() => SelectSize(size)">
+                                    @size
+                                </button>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="selector-group">
+                        <label class="selector-label">
+                            <i class="fas fa-palette"></i>
+                            Chọn màu
+                            @if (!string.IsNullOrEmpty(SelectedColor))
+                            {
+                                var selectedColorInfo = AvailableColors.FirstOrDefault(c => c.HexColor.Equals(SelectedColor, StringComparison.OrdinalIgnoreCase));
+                                if (selectedColorInfo != null)
+                                {
+                                    <span style="color: #059669; font-size: 0.85em; font-weight: 600; margin-left: 8px;">
+                                        (@selectedColorInfo.AvailableStock tổng có sẵn)
+                                    </span>
+                                }
+                            }
+                        </label>
+                        <div class="color-grid">
+                            @foreach (var color in AvailableColors)
+                            {
+                                var isOutOfStock = color.AvailableStock <= 0;
+                                var opacity = isOutOfStock ? "0.4" : "1";
+                                var cursor = isOutOfStock ? "not-allowed" : "pointer";
+                                <div class="color-item @(isOutOfStock ? "out-of-stock" : "")">
+                                    <button type="button"
+                                            class="color-swatch @(SelectedColor == color.HexColor ? "color-swatch--active" : null) @(isOutOfStock ? "disabled" : "")"
+                                            style="background-color: @color.HexColor; @(color.HexColor.ToUpper() == "#FFFFFF" ? "border: 1px solid #cbd5e1;" : string.Empty) opacity: @opacity; cursor: @cursor;"
+                                            @onclick="@(() => { if (!isOutOfStock) SelectColor(color.HexColor); })"
+                                            disabled="@isOutOfStock"
+                                            title="@(isOutOfStock ? $"{color.ColorName} - Hết hàng" : color.ColorName)">
+                                        @if (SelectedColor == color.HexColor)
+                                        {
+                                            <i class="fas fa-check"></i>
+                                        }
+                                        @if (isOutOfStock)
+                                        {
+                                            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(45deg); width: 100%; height: 2px; background: #dc3545;"></div>
+                                        }
+                                    </button>
+                                    <span class="color-label" style="color: @(isOutOfStock ? "#dc3545" : "inherit")">@color.ColorName</span>
+                                    @if (isOutOfStock)
+                                    {
+                                        <span class="out-of-stock-badge">Hết hàng</span>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="selector-group selector-group--quantity">
+                        <label class="selector-label">
+                            <i class="fas fa-hashtag"></i>
+                            Số lượng
+                        </label>
+                        <div class="quantity-control">
+                            <button class="quantity-btn" type="button" @onclick="DecreaseQuantity" disabled="@(Quantity <= 1)">
+                                <i class="fas fa-minus"></i>
+                            </button>
+                            <span class="quantity-value">@Quantity</span>
+                            <button class="quantity-btn" type="button" @onclick="IncreaseQuantity">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(SelectedSize) || !string.IsNullOrEmpty(SelectedColor))
+                    {
+                        <div class="selection-summary">
+                            <i class="fas fa-info-circle"></i>
+                            <div>
+                                <strong>Lựa chọn của bạn</strong>
+                                <div class="selection-tags">
+                                    @if (!string.IsNullOrEmpty(SelectedSize))
+                                    {
+                                        <span class="tag">Size: @SelectedSize</span>
+                                    }
+                                    @if (!string.IsNullOrEmpty(SelectedColor))
+                                    {
+                                        <span class="tag">Màu: @SelectedColor</span>
+                                    }
+                                    <span class="tag">SL: @Quantity</span>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseModal">
+                        <i class="fas fa-times me-2"></i>
+                        Hủy
+                    </button>
+                    <button type="button"
+                            class="btn btn-primary"
+                            @onclick="AddToCart"
+                            disabled="@(string.IsNullOrEmpty(SelectedSize) || string.IsNullOrEmpty(SelectedColor))">
+                        <i class="fas fa-shopping-cart me-2"></i>
+                        Thêm vào giỏ hàng
+                    </button>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Product? Product { get; set; }
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<string> OnAddToCart { get; set; }
+
+    private string SelectedSize = "";
+    private string SelectedColor = "";
+    private int Quantity = 1;
+    private string CurrentImageUrl = "";
+
+    // Get available sizes and colors from product data
+    private List<string> AvailableSizes => Product?.Sizes ?? new List<string>();
+    private List<ColorInfo> AvailableColors => Product?.Colors ?? new List<ColorInfo>();
+
+    private ElementReference? modalOverlayRef;
+    private ElementReference? modalShellRef;
+
+    protected override void OnParametersSet()
+    {
+        if (IsVisible && Product != null)
+        {
+            // Reset selections when modal opens
+            SelectedSize = "";
+            SelectedColor = "";
+            Quantity = 1;
+            CurrentImageUrl = Product.ImageUrl; // Set default image
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (IsVisible && modalShellRef.HasValue)
+        {
+            // Lock body scroll and ensure modal is centered
+            await JSRuntime.InvokeVoidAsync("eval", @"
+                (function() {
+                    // Lock body scroll
+                    document.body.style.overflow = 'hidden';
+                    document.body.style.paddingRight = (window.innerWidth - document.documentElement.clientWidth) + 'px';
+                    // Add global overlay class for full-width dark backdrop
+                    document.body.classList.add('modal-open-overlay');
+                    
+                    // Move modal overlay to body to escape any parent containers
+                    const modalOverlay = document.querySelector('.modal-overlay');
+                    if (modalOverlay && modalOverlay.parentElement !== document.body) {
+                        document.body.appendChild(modalOverlay);
+                    }
+                    
+                    const modal = document.querySelector('.modal-shell');
+                    if (modal) {
+                        // Wait for layout to complete
+                        setTimeout(function() {
+                            // Scroll modal into view with smooth behavior
+                            modal.scrollIntoView({
+                                behavior: 'smooth',
+                                block: 'center',
+                                inline: 'nearest'
+                            });
+                        }, 50);
+                    }
+                })();
+            ");
+        }
+        else if (!IsVisible)
+        {
+            // Restore body scroll when modal closes
+            await JSRuntime.InvokeVoidAsync("eval", @"
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+                document.body.classList.remove('modal-open-overlay');
+            ");
+        }
+    }
+
+    private void SelectSize(string size)
+    {
+        SelectedSize = size;
+        StateHasChanged();
+    }
+
+    private void SelectColor(string color)
+    {
+        SelectedColor = color;
+        UpdateImageByColor(color);
+        StateHasChanged();
+    }
+
+    private void IncreaseQuantity()
+    {
+        Quantity++;
+    }
+
+    private void DecreaseQuantity()
+    {
+        if (Quantity > 1)
+            Quantity--;
+    }
+
+    private string GetColorCode(string colorInput)
+    {
+        // The API already provides hex color codes, so return as is
+        return colorInput;
+    }
+
+    private string GetColorName(string colorInput)
+    {
+        // Convert hex codes from API to readable Vietnamese names
+        return colorInput.ToUpper() switch
+        {
+            "#000000" => "Đen",
+            "#FFFFFF" => "Trắng",
+            "#808080" => "Xám", 
+            "#000080" => "Xanh Navy",
+            "#FF0000" => "Đỏ",
+            "#008000" => "Xanh Lá",
+            "#0000FF" => "Xanh Dương",
+            "#FFFF00" => "Vàng",
+            "#FFA500" => "Cam",
+            "#800080" => "Tím",
+            "#A52A2A" => "Nâu",
+            "#FFC0CB" => "Hồng",
+            "#00FF00" => "Xanh Lá Cây",
+            "#C0C0C0" => "Bạc",
+            _ => "Màu khác"
+        };
+    }
+
+    private void UpdateImageByColor(string color)
+    {
+        if (Product?.ColorImages != null && Product.ColorImages.Any())
+        {
+            var colorInfo = Product.ColorImages.FirstOrDefault(ci => ci.Color == GetColorName(color));
+            if (colorInfo?.ImageColors != null && colorInfo.ImageColors.Any())
+            {
+                CurrentImageUrl = colorInfo.ImageColors.First();
+            }
+            else
+            {
+                CurrentImageUrl = Product.ImageUrl;
+            }
+        }
+        else
+        {
+            CurrentImageUrl = Product?.ImageUrl ?? "";
+        }
+    }
+
+    private int GetStockForSizeAndColor(string size, string colorHex)
+    {
+        if (string.IsNullOrEmpty(size) || string.IsNullOrEmpty(colorHex))
+            return 0;
+
+        var colorInfo = AvailableColors.FirstOrDefault(c => c.HexColor.Equals(colorHex, StringComparison.OrdinalIgnoreCase));
+        if (colorInfo?.SizeStock != null && colorInfo.SizeStock.TryGetValue(size, out int stock))
+        {
+            return stock;
+        }
+        return 0;
+    }
+
+    private bool IsCurrentSelectionOutOfStock()
+    {
+        // Kiểm tra nếu cả màu và size đều đã được chọn
+        if (string.IsNullOrEmpty(SelectedColor) || string.IsNullOrEmpty(SelectedSize))
+            return false;
+
+        // Kiểm tra stock của combo màu + size
+        return GetStockForSizeAndColor(SelectedSize, SelectedColor) <= 0;
+    }
+
+    private async Task AddToCart()
+    {
+        if (Product != null && !string.IsNullOrEmpty(SelectedSize) && !string.IsNullOrEmpty(SelectedColor))
+        {
+            // VariantID sẽ được backend API tự động tìm dựa trên ProductId + Size + Color
+            var response = await CartService.AddToCartAsync(Product, Quantity, SelectedSize, SelectedColor);
+            
+            if (response?.Success == true)
+            {
+                await OnAddToCart.InvokeAsync($"Thêm thành công! {Product.Name} (Size: {SelectedSize}, Màu: {SelectedColor}) x{Quantity}");
+            }
+            else
+            {
+                await OnAddToCart.InvokeAsync($"Không thể thêm vào giỏ hàng. {response?.Message ?? "Vui lòng thử lại."}");
+            }
+            
+            await CloseModal();
+        }
+    }
+
+    private async Task CloseModal()
+    {
+        IsVisible = false;
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task OnBackdropClick()
+    {
+        await CloseModal();
+    }
+}
+
+<style>
+    .product-preview {
+        position: relative;
+    }
+
+    .modal-out-of-stock-badge {
+        position: absolute !important;
+        top: 12px !important;
+        left: 12px !important;
+        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%) !important;
+        color: white !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+        font-size: 12px !important;
+        letter-spacing: 0.8px !important;
+        padding: 8px 16px !important;
+        border-radius: 6px !important;
+        box-shadow: 0 4px 12px rgba(220, 53, 69, 0.5) !important;
+        border: 2px solid rgba(255, 255, 255, 0.9) !important;
+        z-index: 10 !important;
+        animation: pulseModalOutOfStock 2s ease-in-out infinite;
+    }
+
+    @@keyframes pulseModalOutOfStock {
+        0%, 100% {
+            transform: scale(1);
+            box-shadow: 0 4px 12px rgba(220, 53, 69, 0.5);
+        }
+        50% {
+            transform: scale(1.05);
+            box-shadow: 0 6px 16px rgba(220, 53, 69, 0.7);
+        }
+    }
+</style>

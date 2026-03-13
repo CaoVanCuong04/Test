@@ -1,0 +1,373 @@
+﻿@using WebUI.Models
+
+<!-- Product Image Gallery Component -->
+<div class="product-image-gallery">
+    <!-- Main Image Display -->
+    <div class="main-image-container">
+        <div class="image-wrapper">
+            @if (IsCurrentSelectionOutOfStock())
+            {
+                <span class="product-badge out-of-stock-badge">
+                    Hết hàng
+                </span>
+            }
+            else if (Product.HasBadge)
+            {
+                <span class="product-badge @(Product.IsSale ? "sale" : "new")">
+                    @Product.Badge
+                </span>
+            }
+            <img src="@SelectedImageUrl" 
+                 alt="@Product.Name" 
+                 class="main-image"
+                 @onclick="OpenImageModal" />
+            
+            <!-- Zoom Icon -->
+            <button class="zoom-btn" @onclick="OpenImageModal" title="Click to zoom">
+                <i class="fas fa-search-plus"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Thumbnail Images -->
+    <div class="thumbnail-gallery">
+        <div class="thumbnail-container">
+            @foreach (var (imageUrl, index) in GetProductImages().Select((img, idx) => (img, idx)))
+            {
+                <div class="thumbnail-item @(imageUrl == SelectedImageUrl ? "active" : "")"
+                     @onclick="() => SelectImage(imageUrl)">
+                    <img src="@imageUrl" alt="@Product.Name view @(index + 1)" />
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Image Navigation Arrows (for mobile) -->
+    <button class="nav-arrow nav-prev" @onclick="PreviousImage" title="Previous image">
+        <i class="fas fa-chevron-left"></i>
+    </button>
+    <button class="nav-arrow nav-next" @onclick="NextImage" title="Next image">
+        <i class="fas fa-chevron-right"></i>
+    </button>
+
+    <!-- Image Counter -->
+    <div class="image-counter">
+        <span>@(GetCurrentImageIndex() + 1) / @GetProductImages().Count</span>
+    </div>
+</div>
+
+<!-- Image Modal for Full-Screen View -->
+@if (ShowImageModal)
+{
+    <div class="image-modal-overlay" @onclick="CloseImageModal">
+        <div class="image-modal-content" @onclick:stopPropagation="true">
+            <button class="modal-close" @onclick="CloseImageModal">
+                <i class="fas fa-times"></i>
+            </button>
+            
+            <div class="modal-image-container">
+                <img src="@SelectedImageUrl" alt="@Product.Name" class="modal-image" />
+            </div>
+            
+            <!-- Modal Navigation -->
+            <button class="modal-nav modal-prev" @onclick="PreviousImage">
+                <i class="fas fa-chevron-left"></i>
+            </button>
+            <button class="modal-nav modal-next" @onclick="NextImage">
+                <i class="fas fa-chevron-right"></i>
+            </button>
+            
+            <!-- Modal Thumbnails -->
+            <div class="modal-thumbnails">
+                @foreach (var (imageUrl, index) in GetProductImages().Select((img, idx) => (img, idx)))
+                {
+                    <div class="modal-thumbnail @(imageUrl == SelectedImageUrl ? "active" : "")"
+                         @onclick="() => SelectImage(imageUrl)">
+                        <img src="@imageUrl" alt="@Product.Name view @(index + 1)" />
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Product Product { get; set; } = new();
+    [Parameter] public string SelectedColor { get; set; } = "";
+    [Parameter] public string SelectedSize { get; set; } = "";
+
+    private string SelectedImageUrl { get; set; } = "";
+    private bool ShowImageModal { get; set; } = false;
+
+    private bool IsCurrentSelectionOutOfStock()
+    {
+        // Kiểm tra nếu cả màu và size đều đã được chọn
+        if (string.IsNullOrEmpty(SelectedColor) || string.IsNullOrEmpty(SelectedSize))
+            return false;
+
+        // Tìm thông tin màu được chọn
+        var colorInfo = Product?.Colors?.FirstOrDefault(c => 
+            c.HexColor.Equals(SelectedColor, StringComparison.OrdinalIgnoreCase));
+
+        if (colorInfo?.SizeStock == null)
+            return false;
+
+        // Kiểm tra stock của combo màu + size
+        if (colorInfo.SizeStock.TryGetValue(SelectedSize, out int stock))
+        {
+            return stock <= 0;
+        }
+
+        return false;
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (Product != null)
+        {
+            UpdateImageByColor();
+        }
+    }
+
+    private void UpdateImageByColor()
+    {
+        Console.WriteLine($"UpdateImageByColor - SelectedColor: '{SelectedColor}'");
+        Console.WriteLine($"ColorImages available: {Product?.ColorImages?.Count ?? 0}");
+        
+        // Debug: Print all available color info
+        if (Product?.ColorImages != null)
+        {
+            foreach (var ci in Product.ColorImages)
+            {
+                Console.WriteLine($"  ColorImageInfo - Color: '{ci.Color}', ImageCount: {ci.ImageColors?.Count ?? 0}");
+            }
+        }
+        
+        // Priority 1: If "ALL" is selected, show first available image from all images
+        if (SelectedColor == "ALL")
+        {
+            // Try general images first
+            if (Product?.Images != null && Product.Images.Any())
+            {
+                SelectedImageUrl = Product.Images.First();
+                Console.WriteLine($"Using first general image (ALL selected): {SelectedImageUrl}");
+                return;
+            }
+            
+            // If no general images, use first color image available
+            if (Product?.ColorImages != null && Product.ColorImages.Any())
+            {
+                var firstColorImage = Product.ColorImages.FirstOrDefault()?.ImageColors?.FirstOrDefault();
+                if (!string.IsNullOrEmpty(firstColorImage))
+                {
+                    SelectedImageUrl = firstColorImage;
+                    Console.WriteLine($"Using first color image (ALL selected): {SelectedImageUrl}");
+                    return;
+                }
+            }
+        }
+        
+        // Priority 2: Show specific color images if color is selected and exists
+        if (!string.IsNullOrEmpty(SelectedColor) && SelectedColor != "ALL" &&
+            Product?.ColorImages != null)
+        {
+            // Find color name from hex code using Product.Colors
+            string colorName = Product.Colors?.FirstOrDefault(c => 
+                c.HexColor.Equals(SelectedColor, StringComparison.OrdinalIgnoreCase))?.ColorName ?? "";
+            
+            Console.WriteLine($"Converting hex '{SelectedColor}' to color name '{colorName}'");
+            
+            if (!string.IsNullOrEmpty(colorName))
+            {
+                // Match ColorImageInfo by color name
+                var colorImageInfo = Product.ColorImages.FirstOrDefault(ci => 
+                    ci.Color.Equals(colorName, StringComparison.OrdinalIgnoreCase));
+                
+                if (colorImageInfo?.ImageColors != null && colorImageInfo.ImageColors.Any())
+                {
+                    SelectedImageUrl = colorImageInfo.ImageColors.First();
+                    Console.WriteLine($"Using color-specific image for '{colorName}': {SelectedImageUrl}");
+                    return;
+                }
+                else
+                {
+                    Console.WriteLine($"No color-specific images found for '{colorName}'");
+                }
+            }
+        }
+        
+        // Priority 3: Use general Images array if available
+        if (Product?.Images != null && Product.Images.Any())
+        {
+            SelectedImageUrl = Product.Images.First();
+            Console.WriteLine($"Using general image: {SelectedImageUrl}");
+            return;
+        }
+        
+        // Priority 4: Fallback to primary image
+        SelectedImageUrl = Product?.ImageUrl ?? "";
+        Console.WriteLine($"Using fallback image: {SelectedImageUrl}");
+    }
+
+    private List<string> GetProductImages()
+    {
+        var images = new List<string>();
+        
+        // Strategy: Show images based on selection priority
+        
+        // 1. If "ALL" is selected, show ALL available images
+        if (SelectedColor == "ALL")
+        {
+            // Add general Images first
+            if (Product?.Images != null && Product.Images.Any())
+            {
+                images.AddRange(Product.Images);
+            }
+            
+            // Add all ColorImages
+            if (Product?.ColorImages != null && Product.ColorImages.Any())
+            {
+                foreach (var colorInfo in Product.ColorImages)
+                {
+                    if (colorInfo.ImageColors != null && colorInfo.ImageColors.Any())
+                    {
+                        images.AddRange(colorInfo.ImageColors);
+                    }
+                }
+            }
+            
+            Console.WriteLine($"Showing ALL {images.Count} images (ALL selected)");
+            return images.Where(img => !string.IsNullOrEmpty(img)).Distinct().ToList();
+        }
+        
+        // 2. If specific color is selected, show ONLY that color's images
+        if (!string.IsNullOrEmpty(SelectedColor) && SelectedColor != "ALL" && Product?.ColorImages != null)
+        {
+            // Find color name from hex code using Product.Colors
+            string colorName = Product.Colors?.FirstOrDefault(c => 
+                c.HexColor.Equals(SelectedColor, StringComparison.OrdinalIgnoreCase))?.ColorName ?? "";
+            
+            Console.WriteLine($"GetProductImages - Converting hex '{SelectedColor}' to color name '{colorName}'");
+            
+            if (!string.IsNullOrEmpty(colorName))
+            {
+                // Match ColorImageInfo by color name
+                var colorImageInfo = Product.ColorImages.FirstOrDefault(ci => 
+                    ci.Color.Equals(colorName, StringComparison.OrdinalIgnoreCase));
+                
+                if (colorImageInfo?.ImageColors != null && colorImageInfo.ImageColors.Any())
+                {
+                    images.AddRange(colorImageInfo.ImageColors);
+                    Console.WriteLine($"Showing {images.Count} color-specific images for '{colorName}'");
+                    return images.Where(img => !string.IsNullOrEmpty(img)).Distinct().ToList();
+                }
+                else
+                {
+                    Console.WriteLine($"No images found for color '{colorName}', falling back to general images");
+                }
+            }
+        }
+        
+        // 3. No color selected or color not found - show general Images
+        if (Product?.Images != null && Product.Images.Any())
+        {
+            images.AddRange(Product.Images);
+            Console.WriteLine($"Showing {images.Count} general images (no color selected)");
+        }
+        
+        // 3. If no general images, show all color images as fallback
+        if (!images.Any() && Product?.ColorImages != null && Product.ColorImages.Any())
+        {
+            foreach (var colorInfo in Product.ColorImages)
+            {
+                if (colorInfo.ImageColors != null && colorInfo.ImageColors.Any())
+                {
+                    images.AddRange(colorInfo.ImageColors);
+                }
+            }
+            Console.WriteLine($"Showing {images.Count} images from all colors (fallback)");
+        }
+        
+        // 4. Final fallback to ImageUrl
+        if (!images.Any())
+        {
+            images.Add(Product?.ImageUrl ?? "");
+            Console.WriteLine("Using fallback to ImageUrl");
+        }
+        
+        // Remove duplicates and empty strings
+        return images.Where(img => !string.IsNullOrEmpty(img)).Distinct().ToList();
+    }
+
+    private void SelectImage(string imageUrl)
+    {
+        SelectedImageUrl = imageUrl;
+        StateHasChanged();
+    }
+
+    private void PreviousImage()
+    {
+        var images = GetProductImages();
+        var currentIndex = images.IndexOf(SelectedImageUrl);
+        var newIndex = currentIndex == 0 ? images.Count - 1 : currentIndex - 1;
+        SelectedImageUrl = images[newIndex];
+        StateHasChanged();
+    }
+
+    private void NextImage()
+    {
+        var images = GetProductImages();
+        var currentIndex = images.IndexOf(SelectedImageUrl);
+        var newIndex = currentIndex == images.Count - 1 ? 0 : currentIndex + 1;
+        SelectedImageUrl = images[newIndex];
+        StateHasChanged();
+    }
+
+    private int GetCurrentImageIndex()
+    {
+        return GetProductImages().IndexOf(SelectedImageUrl);
+    }
+
+    private void OpenImageModal()
+    {
+        ShowImageModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseImageModal()
+    {
+        ShowImageModal = false;
+        StateHasChanged();
+    }
+}
+
+<style>
+    .out-of-stock-badge {
+        position: absolute !important;
+        top: 16px !important;
+        left: 16px !important;
+        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%) !important;
+        color: white !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+        font-size: 14px !important;
+        letter-spacing: 1px !important;
+        padding: 10px 20px !important;
+        border-radius: 8px !important;
+        box-shadow: 0 4px 16px rgba(220, 53, 69, 0.5) !important;
+        border: 2px solid rgba(255, 255, 255, 0.95) !important;
+        z-index: 20 !important;
+        animation: pulseOutOfStock 2s ease-in-out infinite;
+    }
+
+    @@keyframes pulseOutOfStock {
+        0%, 100% {
+            transform: scale(1);
+            box-shadow: 0 4px 16px rgba(220, 53, 69, 0.5);
+        }
+        50% {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(220, 53, 69, 0.7);
+        }
+    }
+</style>

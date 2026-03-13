@@ -1,0 +1,1121 @@
+@using WebUI.Models
+@using WebUI.Services
+@using WebUI.Services.Interfaces
+@inject AddressService AddressService
+@inject IToastService ToastService
+@inject HttpClient Http
+@inject ConfigurationService ConfigService
+@inject IJSRuntime JSRuntime
+
+@if (IsVisible)
+{
+    <div class="modal-overlay-address" @onclick="OnBackdropClick">
+        <div class="modal-shell-address" @onclick:stopPropagation="true">
+            <div class="modal-header-address">
+                <h5 class="modal-title-address">
+                    <i class="fas fa-map-marker-alt me-2"></i>
+                    @(IsEditMode ? "Chỉnh sửa địa chỉ" : IsAddMode ? "Thêm địa chỉ mới" : "Địa chỉ của tôi")
+                </h5>
+                <button type="button" class="btn-close-address" @onclick="CloseModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <div class="modal-body-address">
+                @if (IsAddMode || IsEditMode)
+                {
+                    <!-- Add/Edit Form -->
+                    <div class="address-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Tên người nhận <span class="required">*</span></label>
+                                <input class="form-control-address" @bind="FormData.ReceiverName" placeholder="Nguyễn Văn A" />
+                            </div>
+                            <div class="form-group">
+                                <label>Số điện thoại <span class="required">*</span></label>
+                                <input class="form-control-address" @bind="FormData.ReceiverPhone" placeholder="0901234567" />
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Tỉnh/Thành phố <span class="required">*</span></label>
+                            <select class="form-control-address" @onchange="OnProvinceChanged" disabled="@IsLoadingProvinces">
+                                <option value="">-- Chọn Tỉnh/Thành phố --</option>
+                                @if (Provinces != null)
+                                {
+                                    foreach (var province in Provinces)
+                                    {
+                                        <option value="@province.ProvinceID" selected="@(FormData.GhnProvinceId == province.ProvinceID)">
+                                            @province.ProvinceName
+                                        </option>
+                                    }
+                                }
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Quận/Huyện <span class="required">*</span></label>
+                            <select class="form-control-address" @onchange="OnDistrictChanged" disabled="@(Districts == null || IsLoadingDistricts)">
+                                <option value="">-- Chọn Quận/Huyện --</option>
+                                @if (Districts != null)
+                                {
+                                    foreach (var district in Districts)
+                                    {
+                                        <option value="@district.DistrictID" selected="@(FormData.GhnDistrictId == district.DistrictID)">
+                                            @district.DistrictName
+                                        </option>
+                                    }
+                                }
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Phường/Xã <span class="required">*</span></label>
+                            <select class="form-control-address" @onchange="OnWardChanged" disabled="@(Wards == null || IsLoadingWards)">
+                                <option value="">-- Chọn Phường/Xã --</option>
+                                @if (Wards != null)
+                                {
+                                    foreach (var ward in Wards)
+                                    {
+                                        <option value="@ward.WardCode" selected="@(FormData.GhnWardCode == ward.WardCode)">
+                                            @ward.WardName
+                                        </option>
+                                    }
+                                }
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Địa chỉ chi tiết <span class="required">*</span></label>
+                            <input class="form-control-address" @bind="FormData.AddressDetail" placeholder="Số nhà, tên đường..." />
+                        </div>
+
+                        <div class="form-check-address">
+                            <input type="checkbox" id="isDefault" @bind="FormData.IsDefault" />
+                            <label for="isDefault">Đặt làm địa chỉ mặc định</label>
+                        </div>
+
+                        <div class="form-actions">
+                            <button class="btn-secondary-address" @onclick="CancelForm">Hủy</button>
+                            <button class="btn-primary-address" @onclick="SaveAddress" disabled="@IsSaving">
+                                @if (IsSaving)
+                                {
+                                    <span>Đang lưu...</span>
+                                }
+                                else
+                                {
+                                    <span>@(IsEditMode ? "Cập nhật" : "Thêm địa chỉ")</span>
+                                }
+                            </button>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <!-- Address List -->
+                    <div class="address-list">
+                        @if (IsLoading)
+                        {
+                            <div class="text-center py-4">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Đang tải...</span>
+                                </div>
+                            </div>
+                        }
+                        else if (Addresses == null || !Addresses.Any())
+                        {
+                            <div class="empty-state">
+                                <i class="fas fa-map-marked-alt"></i>
+                                <p>Bạn chưa có địa chỉ nào</p>
+                                <button class="btn-primary-address" @onclick="ShowAddForm">
+                                    <i class="fas fa-plus me-2"></i>Thêm địa chỉ mới
+                                </button>
+                            </div>
+                        }
+                        else
+                        {
+                            <button class="btn-add-new-address" @onclick="ShowAddForm">
+                                <i class="fas fa-plus-circle"></i>
+                                <span>Thêm địa chỉ mới</span>
+                            </button>
+
+                            <div class="addresses-grid">
+                                @foreach (var address in Addresses)
+                                {
+                                    <div class="address-card-modern @(address.IsDefault ? "is-default" : "")">
+                                        <div class="card-header-address">
+                                            <div class="receiver-info">
+                                                <h4 class="receiver-name">@address.ReceiverName</h4>
+                                                <span class="receiver-phone">
+                                                    <i class="fas fa-phone-alt"></i>
+                                                    @address.ReceiverPhone
+                                                </span>
+                                            </div>
+                                            @if (address.IsDefault)
+                                            {
+                                                <div class="badge-default">
+                                                    <i class="fas fa-check-circle"></i>
+                                                    Mặc định
+                                                </div>
+                                            }
+                                        </div>
+
+                                        <div class="card-body-address">
+                                            <div class="address-full">
+                                                <i class="fas fa-map-marker-alt"></i>
+                                                <p>@address.FullAddress</p>
+                                            </div>
+                                        </div>
+
+                                        <div class="card-footer-address">
+                                            @if (OnAddressSelected.HasDelegate)
+                                            {
+                                                <button class="btn-action-modern btn-select-modern" 
+                                                        @onclick="() => SelectAddress(address)"
+                                                        title="Chọn địa chỉ này">
+                                                    <i class="fas fa-check"></i>
+                                                    <span>Chọn</span>
+                                                </button>
+                                            }
+                                            <button class="btn-action-modern btn-edit-modern" 
+                                                    @onclick="() => ShowEditForm(address)"
+                                                    title="Chỉnh sửa">
+                                                <i class="fas fa-edit"></i>
+                                                <span>Sửa</span>
+                                            </button>
+                                            @if (!address.IsDefault)
+                                            {
+                                                <button class="btn-action-modern btn-star-modern" 
+                                                        @onclick="() => SetDefault(address.AddressID)"
+                                                        title="Đặt làm mặc định">
+                                                    <i class="fas fa-star"></i>
+                                                    <span>Mặc định</span>
+                                                </button>
+                                            }
+                                            <button class="btn-action-modern btn-delete-modern" 
+                                                    @onclick="() => ConfirmDelete(address.AddressID)"
+                                                    title="Xóa địa chỉ">
+                                                <i class="fas fa-trash-alt"></i>
+                                                <span>Xóa</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<AddressDto> OnAddressSelected { get; set; }
+
+    private List<AddressDto>? Addresses { get; set; }
+    private bool IsLoading { get; set; }
+    private bool IsSaving { get; set; }
+    private bool IsAddMode { get; set; }
+    private bool IsEditMode { get; set; }
+
+    // Form data
+    private AddressFormData FormData { get; set; } = new();
+    
+    // GHN data
+    private List<GhnProvince>? Provinces { get; set; }
+    private List<GhnDistrict>? Districts { get; set; }
+    private List<GhnWard>? Wards { get; set; }
+    private bool IsLoadingProvinces { get; set; }
+    private bool IsLoadingDistricts { get; set; }
+    private bool IsLoadingWards { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsVisible && !IsAddMode && !IsEditMode)
+        {
+            await LoadAddresses();
+            await LoadProvinces();
+        }
+    }
+
+    private async Task LoadAddresses()
+    {
+        IsLoading = true;
+        StateHasChanged();
+        
+        Addresses = await AddressService.GetUserAddressesAsync();
+        
+        IsLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task LoadProvinces()
+    {
+        if (Provinces != null) return;
+        
+        IsLoadingProvinces = true;
+        try
+        {
+            var apiBaseUrl = await ConfigService.GetApiBaseUrlAsync();
+            var response = await Http.GetAsync($"{apiBaseUrl}/api/shipping/provinces");
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync(typeof(GhnProvinceResponse)) as GhnProvinceResponse;
+            Provinces = result?.Data ?? new List<GhnProvince>();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading provinces: {ex.Message}");
+        }
+        finally
+        {
+            IsLoadingProvinces = false;
+        }
+    }
+
+    private async Task OnProvinceChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int provinceId))
+        {
+            FormData.GhnProvinceId = provinceId;
+            FormData.City = Provinces?.FirstOrDefault(p => p.ProvinceID == provinceId)?.ProvinceName ?? "";
+            FormData.GhnDistrictId = null;
+            FormData.GhnWardCode = null;
+            FormData.District = null;
+            FormData.Ward = "";
+            Districts = null;
+            Wards = null;
+            
+            await LoadDistricts(provinceId);
+        }
+    }
+
+    private async Task LoadDistricts(int provinceId)
+    {
+        IsLoadingDistricts = true;
+        StateHasChanged();
+        
+        try
+        {
+            var apiBaseUrl = await ConfigService.GetApiBaseUrlAsync();
+            var response = await Http.GetAsync($"{apiBaseUrl}/api/shipping/districts/{provinceId}");
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync(typeof(GhnDistrictResponse)) as GhnDistrictResponse;
+            Districts = result?.Data ?? new List<GhnDistrict>();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading districts: {ex.Message}");
+        }
+        finally
+        {
+            IsLoadingDistricts = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnDistrictChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int districtId))
+        {
+            FormData.GhnDistrictId = districtId;
+            FormData.District = Districts?.FirstOrDefault(d => d.DistrictID == districtId)?.DistrictName;
+            FormData.GhnWardCode = null;
+            FormData.Ward = "";
+            Wards = null;
+            
+            await LoadWards(districtId);
+        }
+    }
+
+    private async Task LoadWards(int districtId)
+    {
+        IsLoadingWards = true;
+        StateHasChanged();
+        
+        try
+        {
+            var apiBaseUrl = await ConfigService.GetApiBaseUrlAsync();
+            var response = await Http.GetAsync($"{apiBaseUrl}/api/shipping/wards/{districtId}");
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync(typeof(GhnWardResponse)) as GhnWardResponse;
+            Wards = result?.Data ?? new List<GhnWard>();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading wards: {ex.Message}");
+        }
+        finally
+        {
+            IsLoadingWards = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OnWardChanged(ChangeEventArgs e)
+    {
+        var wardCode = e.Value?.ToString();
+        if (!string.IsNullOrEmpty(wardCode))
+        {
+            FormData.GhnWardCode = wardCode;
+            FormData.Ward = Wards?.FirstOrDefault(w => w.WardCode == wardCode)?.WardName ?? "";
+        }
+    }
+
+    private void ShowAddForm()
+    {
+        FormData = new AddressFormData();
+        IsAddMode = true;
+        IsEditMode = false;
+        Districts = null;
+        Wards = null;
+    }
+
+    private async Task ShowEditForm(AddressDto address)
+    {
+        FormData = new AddressFormData
+        {
+            AddressID = address.AddressID,
+            ReceiverName = address.ReceiverName,
+            ReceiverPhone = address.ReceiverPhone,
+            AddressDetail = address.AddressDetail,
+            City = address.City,
+            District = address.District,
+            Ward = address.Ward,
+            Street = address.Street,
+            GhnProvinceId = address.GhnProvinceId,
+            GhnDistrictId = address.GhnDistrictId,
+            GhnWardCode = address.GhnWardCode,
+            IsDefault = address.IsDefault
+        };
+        
+        IsEditMode = true;
+        IsAddMode = false;
+        
+        // Load districts and wards for editing
+        if (FormData.GhnProvinceId.HasValue)
+        {
+            await LoadDistricts(FormData.GhnProvinceId.Value);
+            if (FormData.GhnDistrictId.HasValue)
+            {
+                await LoadWards(FormData.GhnDistrictId.Value);
+            }
+        }
+    }
+
+    private void CancelForm()
+    {
+        IsAddMode = false;
+        IsEditMode = false;
+        FormData = new AddressFormData();
+        Districts = null;
+        Wards = null;
+    }
+
+    private async Task SaveAddress()
+    {
+        if (!ValidateForm()) return;
+        
+        IsSaving = true;
+        StateHasChanged();
+        
+        try
+        {
+            if (IsEditMode)
+            {
+                var updateReq = new UpdateAddressReq
+                {
+                    AddressID = FormData.AddressID,
+                    ReceiverName = FormData.ReceiverName,
+                    ReceiverPhone = FormData.ReceiverPhone,
+                    AddressDetail = FormData.AddressDetail,
+                    City = FormData.City,
+                    District = FormData.District,
+                    Ward = FormData.Ward,
+                    Street = FormData.Street ?? "",
+                    GhnProvinceId = FormData.GhnProvinceId,
+                    GhnDistrictId = FormData.GhnDistrictId,
+                    GhnWardCode = FormData.GhnWardCode,
+                    IsDefault = FormData.IsDefault
+                };
+                
+                var (success, message) = await AddressService.UpdateAddressAsync(FormData.AddressID, updateReq);
+                if (success)
+                {
+                    ToastService.ShowSuccess(message);
+                    await LoadAddresses();
+                    CancelForm();
+                }
+                else
+                {
+                    ToastService.ShowError(message);
+                }
+            }
+            else
+            {
+                var createReq = new CreateAddressReq
+                {
+                    UserID = 0, // Will be overridden by API from JWT token
+                    ReceiverName = FormData.ReceiverName?.Trim() ?? "",
+                    ReceiverPhone = FormData.ReceiverPhone?.Trim() ?? "",
+                    AddressDetail = FormData.AddressDetail?.Trim() ?? "",
+                    City = FormData.City?.Trim() ?? "",
+                    District = FormData.District?.Trim() ?? "",
+                    Ward = FormData.Ward?.Trim() ?? "",
+                    Street = FormData.Street?.Trim() ?? "",
+                    GhnProvinceId = FormData.GhnProvinceId,
+                    GhnDistrictId = FormData.GhnDistrictId,
+                    GhnWardCode = FormData.GhnWardCode,
+                    IsDefault = FormData.IsDefault
+                };
+                
+                Console.WriteLine($"[AddressManager] Creating address: Province={createReq.GhnProvinceId}, District={createReq.GhnDistrictId}, Ward={createReq.GhnWardCode}");
+                Console.WriteLine($"[AddressManager] City={createReq.City}, District={createReq.District}, Ward={createReq.Ward}");
+                
+                var (success, message, _) = await AddressService.CreateAddressAsync(createReq);
+                if (success)
+                {
+                    ToastService.ShowSuccess(message);
+                    await LoadAddresses();
+                    CancelForm();
+                }
+                else
+                {
+                    ToastService.ShowError(message);
+                }
+            }
+        }
+        finally
+        {
+            IsSaving = false;
+            StateHasChanged();
+        }
+    }
+
+    private bool ValidateForm()
+    {
+        if (string.IsNullOrWhiteSpace(FormData.ReceiverName))
+        {
+            ToastService.ShowError("Vui lòng nhập tên người nhận");
+            return false;
+        }
+        
+        if (string.IsNullOrWhiteSpace(FormData.ReceiverPhone))
+        {
+            ToastService.ShowError("Vui lòng nhập số điện thoại");
+            return false;
+        }
+        
+        if (!FormData.GhnProvinceId.HasValue)
+        {
+            ToastService.ShowError("Vui lòng chọn Tỉnh/Thành phố");
+            return false;
+        }
+        
+        if (!FormData.GhnDistrictId.HasValue)
+        {
+            ToastService.ShowError("Vui lòng chọn Quận/Huyện");
+            return false;
+        }
+        
+        if (string.IsNullOrWhiteSpace(FormData.GhnWardCode))
+        {
+            ToastService.ShowError("Vui lòng chọn Phường/Xã");
+            return false;
+        }
+        
+        if (string.IsNullOrWhiteSpace(FormData.AddressDetail))
+        {
+            ToastService.ShowError("Vui lòng nhập địa chỉ chi tiết");
+            return false;
+        }
+        
+        return true;
+    }
+
+    private async Task SetDefault(int addressId)
+    {
+        var (success, message) = await AddressService.SetDefaultAddressAsync(addressId);
+        if (success)
+        {
+            ToastService.ShowSuccess(message);
+            await LoadAddresses();
+        }
+        else
+        {
+            ToastService.ShowError(message);
+        }
+    }
+
+    private async Task ConfirmDelete(int addressId)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Bạn có chắc muốn xóa địa chỉ này?");
+        if (confirmed)
+        {
+            var (success, message) = await AddressService.DeleteAddressAsync(addressId);
+            if (success)
+            {
+                ToastService.ShowSuccess(message);
+                await LoadAddresses();
+            }
+            else
+            {
+                ToastService.ShowError(message);
+            }
+        }
+    }
+
+    private async Task SelectAddress(AddressDto address)
+    {
+        await OnAddressSelected.InvokeAsync(address);
+        await CloseModal();
+    }
+
+    private void OnBackdropClick()
+    {
+        if (!IsAddMode && !IsEditMode)
+        {
+            _ = CloseModal();
+        }
+    }
+
+    private async Task CloseModal()
+    {
+        IsVisible = false;
+        IsAddMode = false;
+        IsEditMode = false;
+        FormData = new AddressFormData();
+        await OnClose.InvokeAsync();
+    }
+
+    private class AddressFormData
+    {
+        public int AddressID { get; set; }
+        public string ReceiverName { get; set; } = string.Empty;
+        public string ReceiverPhone { get; set; } = string.Empty;
+        public string AddressDetail { get; set; } = string.Empty;
+        public string City { get; set; } = string.Empty;
+        public string? District { get; set; }
+        public string Ward { get; set; } = string.Empty;
+        public string Street { get; set; } = string.Empty;
+        public int? GhnProvinceId { get; set; }
+        public int? GhnDistrictId { get; set; }
+        public string? GhnWardCode { get; set; }
+        public bool IsDefault { get; set; }
+    }
+
+    // GHN Models
+    private class GhnProvince
+    {
+        public int ProvinceID { get; set; }
+        public string ProvinceName { get; set; } = string.Empty;
+    }
+
+    private class GhnDistrict
+    {
+        public int DistrictID { get; set; }
+        public string DistrictName { get; set; } = string.Empty;
+    }
+
+    private class GhnWard
+    {
+        public string WardCode { get; set; } = string.Empty;
+        public string WardName { get; set; } = string.Empty;
+    }
+
+    private class GhnProvinceResponse
+    {
+        public List<GhnProvince> Data { get; set; } = new();
+    }
+
+    private class GhnDistrictResponse
+    {
+        public List<GhnDistrict> Data { get; set; } = new();
+    }
+
+    private class GhnWardResponse
+    {
+        public List<GhnWard> Data { get; set; } = new();
+    }
+}
+
+<style>
+    /* Modal Overlay */
+    .modal-overlay-address {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.6);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+        padding: 20px;
+        backdrop-filter: blur(4px);
+    }
+
+    .modal-shell-address {
+        background: white;
+        border-radius: 16px;
+        max-width: 900px;
+        width: 100%;
+        max-height: 90vh;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        animation: slideUp 0.3s ease-out;
+    }
+
+    @@keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .modal-header-address {
+        padding: 24px 28px;
+        border-bottom: 2px solid #f1f3f5;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .modal-title-address {
+        font-size: 1.4rem;
+        font-weight: 700;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .btn-close-address {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        font-size: 1.5rem;
+        color: white;
+        cursor: pointer;
+        padding: 0;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        transition: all 0.2s;
+    }
+
+    .btn-close-address:hover {
+        background: rgba(255, 255, 255, 0.3);
+        transform: rotate(90deg);
+    }
+
+    .modal-body-address {
+        padding: 28px;
+        overflow-y: auto;
+        flex: 1;
+        background: #f8f9fa;
+    }
+
+    /* Add New Button */
+    .btn-add-new-address {
+        width: 100%;
+        padding: 16px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 1rem;
+        cursor: pointer;
+        margin-bottom: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        transition: all 0.3s;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-add-new-address:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+    }
+
+    .btn-add-new-address i {
+        font-size: 1.2rem;
+    }
+
+    /* Addresses Grid */
+    .addresses-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(100%, 1fr));
+        gap: 20px;
+    }
+
+    /* Modern Address Card */
+    .address-card-modern {
+        background: white;
+        border-radius: 12px;
+        overflow: hidden;
+        border: 2px solid #e9ecef;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+
+    .address-card-modern:hover {
+        border-color: #667eea;
+        box-shadow: 0 8px 25px rgba(102, 126, 234, 0.15);
+        transform: translateY(-2px);
+    }
+
+    .address-card-modern.is-default {
+        border-color: #10b981;
+        background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%);
+    }
+
+    .card-header-address {
+        padding: 20px 24px;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-bottom: 1px solid #dee2e6;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+    }
+
+    .address-card-modern.is-default .card-header-address {
+        background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+    }
+
+    .receiver-info {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .receiver-name {
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: #1e293b;
+        margin: 0;
+    }
+
+    .receiver-phone {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #64748b;
+        font-size: 0.95rem;
+        font-weight: 500;
+    }
+
+    .receiver-phone i {
+        color: #667eea;
+    }
+
+    .badge-default {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        background: #10b981;
+        color: white;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+    }
+
+    .card-body-address {
+        padding: 20px 24px;
+    }
+
+    .address-full {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        color: #475569;
+        line-height: 1.6;
+    }
+
+    .address-full i {
+        color: #667eea;
+        font-size: 1.1rem;
+        margin-top: 2px;
+        flex-shrink: 0;
+    }
+
+    .address-full p {
+        margin: 0;
+        font-size: 0.95rem;
+    }
+
+    /* Card Footer with Actions */
+    .card-footer-address {
+        padding: 16px 24px;
+        background: #f8f9fa;
+        border-top: 1px solid #e9ecef;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .btn-action-modern {
+        flex: 1;
+        min-width: 100px;
+        padding: 10px 16px;
+        border: 2px solid transparent;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }
+
+    .btn-action-modern:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .btn-action-modern i {
+        font-size: 1rem;
+    }
+
+    .btn-select-modern {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .btn-select-modern:hover {
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-edit-modern {
+        background: white;
+        color: #3b82f6;
+        border-color: #3b82f6;
+    }
+
+    .btn-edit-modern:hover {
+        background: #3b82f6;
+        color: white;
+        box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+    }
+
+    .btn-star-modern {
+        background: white;
+        color: #f59e0b;
+        border-color: #f59e0b;
+    }
+
+    .btn-star-modern:hover {
+        background: #f59e0b;
+        color: white;
+        box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+    }
+
+    .btn-delete-modern {
+        background: white;
+        color: #ef4444;
+        border-color: #ef4444;
+    }
+
+    .btn-delete-modern:hover {
+        background: #ef4444;
+        color: white;
+        box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+    }
+
+    /* Form Styles */
+    .address-form {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        background: white;
+        padding: 24px;
+        border-radius: 12px;
+    }
+
+    .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+    }
+
+    .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .form-group label {
+        font-weight: 600;
+        color: #1e293b;
+        font-size: 0.95rem;
+    }
+
+    .required {
+        color: #ef4444;
+        margin-left: 2px;
+    }
+
+    .form-control-address {
+        padding: 12px 14px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 0.95rem;
+        transition: all 0.2s;
+        font-family: inherit;
+    }
+
+    .form-control-address:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+    }
+
+    .form-control-address:disabled {
+        background: #f1f5f9;
+        cursor: not-allowed;
+        color: #94a3b8;
+    }
+
+    .form-check-address {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 8px;
+        padding: 12px;
+        background: #f8f9fa;
+        border-radius: 8px;
+    }
+
+    .form-check-address input[type="checkbox"] {
+        width: 20px;
+        height: 20px;
+        cursor: pointer;
+        accent-color: #667eea;
+    }
+
+    .form-check-address label {
+        cursor: pointer;
+        user-select: none;
+        margin: 0;
+        font-weight: 500;
+        color: #475569;
+    }
+
+    .form-actions {
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+        margin-top: 12px;
+        padding-top: 20px;
+        border-top: 2px solid #f1f3f5;
+    }
+
+    .btn-primary-address, .btn-secondary-address {
+        padding: 12px 28px;
+        border: none;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 0.95rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .btn-primary-address {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    }
+
+    .btn-primary-address:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-primary-address:disabled {
+        background: #cbd5e1;
+        cursor: not-allowed;
+        opacity: 0.6;
+        box-shadow: none;
+    }
+
+    .btn-secondary-address {
+        background: white;
+        color: #64748b;
+        border: 2px solid #e2e8f0;
+    }
+
+    .btn-secondary-address:hover {
+        background: #f8fafc;
+        border-color: #cbd5e1;
+    }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 80px 30px;
+        background: white;
+        border-radius: 12px;
+    }
+
+    .empty-state i {
+        font-size: 5rem;
+        color: #cbd5e1;
+        margin-bottom: 24px;
+    }
+
+    .empty-state p {
+        font-size: 1.15rem;
+        color: #64748b;
+        margin-bottom: 28px;
+    }
+
+    /* Responsive */
+    @@media (max-width: 768px) {
+        .modal-shell-address {
+            max-width: 100%;
+            max-height: 100vh;
+            border-radius: 0;
+        }
+
+        .modal-body-address {
+            padding: 20px;
+        }
+
+        .form-row {
+            grid-template-columns: 1fr;
+        }
+
+        .card-footer-address {
+            flex-direction: column;
+        }
+
+        .btn-action-modern {
+            width: 100%;
+            min-width: auto;
+        }
+
+        .addresses-grid {
+            gap: 16px;
+        }
+    }
+</style>

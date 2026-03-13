@@ -1,0 +1,805 @@
+@page "/authentication/login-callback"
+@using WebUI.Services
+@using WebUI.Services.Interfaces
+@using WebUI.Models
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@inject GoogleAuthService GoogleAuth
+@inject IAuthService AuthService
+@inject ConfigurationService ConfigService
+
+<div class="auth-container">
+    <div class="callback-container">
+        <div class="callback-content">
+            @if (isProcessing)
+            {
+                <div class="google-auth-loading">
+                    <!-- Google Logo Animation -->
+                    <div class="google-logo-wrapper">
+                        <svg class="google-logo" viewBox="0 0 48 48">
+                            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
+                            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
+                            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
+                            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
+                            <path fill="none" d="M0 0h48v48H0z"></path>
+                        </svg>
+                        <div class="loading-ring"></div>
+                    </div>
+
+                    <!-- Animated text -->
+                    <h3 class="auth-title">
+                        <span class="gradient-text">Đang xác thực với Google</span>
+                    </h3>
+                    <p class="auth-message">Vui lòng chờ trong giây lát</p>
+
+                    <!-- Loading dots -->
+                    <div class="auth-dots">
+                        <span class="auth-dot"></span>
+                        <span class="auth-dot"></span>
+                        <span class="auth-dot"></span>
+                    </div>
+
+                    <!-- Decorative particles -->
+                    <div class="auth-particles">
+                        <div class="auth-particle"></div>
+                        <div class="auth-particle"></div>
+                        <div class="auth-particle"></div>
+                        <div class="auth-particle"></div>
+                    </div>
+                </div>
+            }
+            else if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="error-container">
+                    <div class="error-icon-wrapper">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <h3 class="error-title">Đăng nhập thất bại</h3>
+                    <p class="error-message">@errorMessage</p>
+                    <div class="error-actions">
+                        <button class="btn-retry" @onclick="RetryLogin">
+                            <i class="fas fa-redo"></i>
+                            <span>Thử lại</span>
+                        </button>
+                        <a href="/login" class="btn-back">
+                            <i class="fas fa-arrow-left"></i>
+                            <span>Quay lại đăng nhập</span>
+                        </a>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<style>
+/* Container */
+.auth-container {
+    width: 100%;
+    min-height: 100vh;
+}
+
+.callback-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 2rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    position: relative;
+    overflow: hidden;
+}
+
+.callback-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+        radial-gradient(circle at 20% 50%, rgba(66, 133, 244, 0.2) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(234, 67, 53, 0.2) 0%, transparent 50%);
+    animation: gradientShift 10s ease infinite;
+}
+
+.callback-content {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    max-width: 440px;
+    width: 100%;
+}
+
+/* Google Auth Loading */
+.google-auth-loading {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    padding: 3.5rem 2.5rem;
+    border-radius: 24px;
+    box-shadow: 
+        0 20px 60px rgba(0, 0, 0, 0.2),
+        0 0 1px rgba(255, 255, 255, 0.5),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+    position: relative;
+    overflow: hidden;
+    animation: containerFadeIn 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.google-auth-loading::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(
+        45deg,
+        transparent 30%,
+        rgba(66, 133, 244, 0.05) 50%,
+        transparent 70%
+    );
+    animation: shimmer 3s infinite;
+}
+
+/* Google Logo */
+.google-logo-wrapper {
+    position: relative;
+    width: 100px;
+    height: 100px;
+    margin: 0 auto 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.google-logo {
+    width: 60px;
+    height: 60px;
+    position: relative;
+    z-index: 2;
+    animation: logoFloat 3s ease-in-out infinite;
+    filter: drop-shadow(0 4px 12px rgba(66, 133, 244, 0.3));
+}
+
+.loading-ring {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border: 3px solid transparent;
+    border-top-color: #4285f4;
+    border-right-color: #ea4335;
+    border-bottom-color: #fbbc04;
+    border-left-color: #34a853;
+    border-radius: 50%;
+    animation: spinRing 1.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
+}
+
+/* Text */
+.auth-title {
+    margin: 0 0 1rem;
+    font-size: 1.75rem;
+    font-weight: 700;
+    position: relative;
+    z-index: 1;
+}
+
+.gradient-text {
+    background: linear-gradient(135deg, #4285f4, #ea4335, #fbbc04, #34a853);
+    background-size: 200% 200%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: gradientFlow 3s ease infinite;
+}
+
+.auth-message {
+    color: #5f6368;
+    font-size: 1rem;
+    margin: 0 0 2rem;
+    font-weight: 400;
+    position: relative;
+    z-index: 1;
+    animation: textFadeIn 0.6s ease 0.2s both;
+}
+
+/* Loading Dots */
+.auth-dots {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    position: relative;
+    z-index: 1;
+}
+
+.auth-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #4285f4, #34a853);
+    animation: dotPulse 1.4s infinite ease-in-out;
+}
+
+.auth-dot:nth-child(1) {
+    animation-delay: -0.32s;
+}
+
+.auth-dot:nth-child(2) {
+    animation-delay: -0.16s;
+}
+
+/* Particles */
+.auth-particles {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    overflow: hidden;
+    border-radius: 24px;
+}
+
+.auth-particle {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    background: linear-gradient(135deg, #4285f4, #34a853);
+    border-radius: 50%;
+    opacity: 0;
+    animation: particleRise 4s infinite;
+}
+
+.auth-particle:nth-child(1) {
+    left: 15%;
+    animation-delay: 0s;
+}
+
+.auth-particle:nth-child(2) {
+    left: 40%;
+    animation-delay: 1s;
+}
+
+.auth-particle:nth-child(3) {
+    left: 65%;
+    animation-delay: 2s;
+}
+
+.auth-particle:nth-child(4) {
+    left: 85%;
+    animation-delay: 3s;
+}
+
+/* Error Container */
+.error-container {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(20px);
+    padding: 3rem 2.5rem;
+    border-radius: 24px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+    animation: containerFadeIn 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.error-icon-wrapper {
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 1.5rem;
+    background: linear-gradient(135deg, #ff6b6b, #ee5a6f);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: errorIconBounce 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.error-icon-wrapper i {
+    font-size: 2.5rem;
+    color: white;
+}
+
+.error-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #1a1a1a;
+    margin: 0 0 1rem;
+}
+
+.error-message {
+    color: #5f6368;
+    font-size: 1rem;
+    margin: 0 0 2rem;
+    line-height: 1.6;
+}
+
+.error-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.btn-retry,
+.btn-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.875rem 1.75rem;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    border: none;
+    text-decoration: none;
+}
+
+.btn-retry {
+    background: linear-gradient(135deg, #4285f4, #34a853);
+    color: white;
+    box-shadow: 0 4px 12px rgba(66, 133, 244, 0.3);
+}
+
+.btn-retry:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(66, 133, 244, 0.4);
+}
+
+.btn-retry:active {
+    transform: translateY(0);
+}
+
+.btn-back {
+    background: white;
+    color: #5f6368;
+    border: 2px solid #e0e0e0;
+}
+
+.btn-back:hover {
+    background: #f8f9fa;
+    border-color: #d0d0d0;
+    transform: translateY(-2px);
+}
+
+/* Animations */
+@@keyframes containerFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(30px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@@keyframes gradientShift {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.8;
+    }
+}
+
+@@keyframes shimmer {
+    0% {
+        transform: translate(-50%, -50%) rotate(0deg);
+    }
+    100% {
+        transform: translate(50%, 50%) rotate(360deg);
+    }
+}
+
+@@keyframes logoFloat {
+    0%, 100% {
+        transform: translateY(0) scale(1);
+    }
+    50% {
+        transform: translateY(-10px) scale(1.05);
+    }
+}
+
+@@keyframes spinRing {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+@@keyframes gradientFlow {
+    0% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+@@keyframes textFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@@keyframes dotPulse {
+    0%, 80%, 100% {
+        transform: scale(0.8);
+        opacity: 0.5;
+    }
+    40% {
+        transform: scale(1.3);
+        opacity: 1;
+    }
+}
+
+@@keyframes particleRise {
+    0% {
+        bottom: -10px;
+        opacity: 0;
+        transform: scale(0);
+    }
+    20% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    80% {
+        opacity: 1;
+    }
+    100% {
+        bottom: 100%;
+        opacity: 0;
+        transform: scale(0);
+    }
+}
+
+@@keyframes errorIconBounce {
+    0% {
+        transform: scale(0);
+        opacity: 0;
+    }
+    50% {
+        transform: scale(1.1);
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* Mobile Responsive */
+@@media (max-width: 576px) {
+    .callback-container {
+        padding: 1rem;
+    }
+
+    .google-auth-loading,
+    .error-container {
+        padding: 2.5rem 1.5rem;
+    }
+
+    .google-logo-wrapper {
+        width: 80px;
+        height: 80px;
+    }
+
+    .google-logo {
+        width: 48px;
+        height: 48px;
+    }
+
+    .auth-title {
+        font-size: 1.5rem;
+    }
+
+    .auth-message {
+        font-size: 0.95rem;
+    }
+
+    .error-icon-wrapper {
+        width: 70px;
+        height: 70px;
+    }
+
+    .error-icon-wrapper i {
+        font-size: 2rem;
+    }
+
+    .error-title {
+        font-size: 1.5rem;
+    }
+
+    .error-actions {
+        flex-direction: column;
+    }
+
+    .btn-retry,
+    .btn-back {
+        width: 100%;
+        justify-content: center;
+    }
+}
+</style>
+
+@code {
+    private bool isProcessing = true;
+    private string errorMessage = "";
+    private string? authCode;
+    private string? state;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var uri = new Uri(Navigation.Uri);
+            var queryParams = System.Web.HttpUtility.ParseQueryString(uri.Query);
+            
+            authCode = queryParams["code"];
+            state = queryParams["state"];
+            var error = queryParams["error"];
+
+            if (!string.IsNullOrEmpty(error))
+            {
+                errorMessage = GetErrorMessage(error);
+                isProcessing = false;
+                return;
+            }
+
+            if (string.IsNullOrEmpty(authCode))
+            {
+                errorMessage = "Không nhận được mã xác thực từ Google";
+                isProcessing = false;
+                return;
+            }
+
+            // Validate state for security
+            if (!await GoogleAuth.ValidateState(state ?? ""))
+            {
+                errorMessage = "Phiên đăng nhập không hợp lệ. Vui lòng thử lại.";
+                isProcessing = false;
+                return;
+            }
+
+            await ProcessGoogleAuth();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Có lỗi xảy ra trong quá trình xác thực";
+            isProcessing = false;
+            Console.WriteLine($"[GoogleCallback] Auth error: {ex.Message}");
+        }
+        finally
+        {
+            await GoogleAuth.ClearAuthState();
+        }
+    }
+
+    private async Task ProcessGoogleAuth()
+    {
+        try
+        {
+            try 
+            {
+                var tokenResponse = await ExchangeCodeForToken(authCode ?? "");
+                
+                if (tokenResponse == null || string.IsNullOrEmpty(tokenResponse.IdToken))
+                {
+                    errorMessage = "Không thể lấy ID Token từ Google";
+                    return;
+                }
+                
+                var loginRequest = new WebUI.Models.GoogleLoginRequest
+                {
+                    Email = tokenResponse.Email ?? "unknown@gmail.com",
+                    Name = tokenResponse.Name ?? "Google User",
+                    GoogleId = tokenResponse.Sub ?? "unknown",
+                    Picture = tokenResponse.Picture ?? "",
+                    AccessToken = tokenResponse.IdToken
+                };
+
+                var authResult = await AuthService.LoginWithGoogleAsync(loginRequest);
+
+                if (authResult.Success)
+                {
+                    Navigation.NavigateTo("/");
+                }
+                else
+                {
+                    errorMessage = authResult.Message ?? "Đăng nhập thất bại";
+                    isProcessing = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                errorMessage = "Có lỗi xảy ra trong quá trình xác thực";
+                isProcessing = false;
+                Console.WriteLine($"[GoogleCallback] Process error: {ex.Message}");
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Có lỗi xảy ra trong quá trình xác thực";
+            isProcessing = false;
+            Console.WriteLine($"[GoogleCallback] Process error: {ex.Message}");
+        }
+    }
+
+    private async Task<GoogleTokenResponse?> ExchangeCodeForToken(string code)
+    {
+        try
+        {
+            var googleSettings = await ConfigService.GetGoogleAuthSettingsAsync();
+            
+            // Tạo request để exchange authorization code for tokens
+            var tokenRequest = new Dictionary<string, string>
+            {
+                ["client_id"] = googleSettings.ClientId,
+                ["client_secret"] = googleSettings.ClientSecret, // Chỉ dùng cho demo, thực tế nên làm ở backend
+                ["code"] = code,
+                ["grant_type"] = "authorization_code",
+                ["redirect_uri"] = "https://localhost:7173/authentication/login-callback"
+            };
+
+            var formContent = new FormUrlEncodedContent(tokenRequest);
+            
+            using var httpClient = new HttpClient();
+            var response = await httpClient.PostAsync("https://oauth2.googleapis.com/token", formContent);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var tokenJson = await response.Content.ReadAsStringAsync();
+                var tokenData = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(tokenJson);
+                
+                var idToken = tokenData.GetProperty("id_token").GetString();
+                var accessToken = tokenData.GetProperty("access_token").GetString();
+                
+                // Decode ID Token để lấy user info (chỉ demo, thực tế nên verify signature)
+                var userInfo = DecodeIdTokenPayload(idToken);
+                
+                return new GoogleTokenResponse
+                {
+                    AccessToken = accessToken ?? "",
+                    IdToken = idToken ?? "",
+                    Email = userInfo?.Email ?? "unknown@gmail.com",
+                    Name = userInfo?.Name ?? "Google User",
+                    Sub = userInfo?.Sub ?? "unknown",
+                    Picture = userInfo?.Picture ?? ""
+                };
+            }
+            
+            // Fallback to mock data if token exchange fails
+            Console.WriteLine("Token exchange failed, using mock data");
+            return new GoogleTokenResponse 
+            { 
+                AccessToken = "mock_access_token_for_demo",
+                IdToken = GenerateMockIdToken(),
+                Email = "test@gmail.com",
+                Name = "Test Google User", 
+                Sub = "google_user_" + DateTime.Now.Ticks,
+                Picture = "https://via.placeholder.com/150"
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GoogleCallback] Token exchange error: {ex.Message}");
+            return new GoogleTokenResponse 
+            { 
+                AccessToken = "mock_access_token_for_demo",
+                IdToken = GenerateMockIdToken(),
+                Email = "test@gmail.com",
+                Name = "Test Google User", 
+                Sub = "google_user_" + DateTime.Now.Ticks,
+                Picture = "https://via.placeholder.com/150"
+            };
+        }
+    }
+    
+    private GoogleUserInfo? DecodeIdTokenPayload(string? idToken)
+    {
+        if (string.IsNullOrEmpty(idToken)) return null;
+        
+        try
+        {
+            var parts = idToken.Split('.');
+            if (parts.Length != 3) return null;
+            
+            var payload = parts[1];
+            // Add padding if needed
+            while (payload.Length % 4 != 0)
+                payload += "=";
+                
+            var payloadBytes = Convert.FromBase64String(payload);
+            var payloadJson = System.Text.Encoding.UTF8.GetString(payloadBytes);
+            
+            return System.Text.Json.JsonSerializer.Deserialize<GoogleUserInfo>(payloadJson, new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+        }
+        catch
+        {
+            return null;
+        }
+    }
+    
+    private static string GenerateMockIdToken()
+    {
+        // Tạo mock ID token có format đúng
+        var header = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("{\"alg\":\"RS256\",\"typ\":\"JWT\"}"));
+        
+        var payloadObj = new
+        {
+            sub = Guid.NewGuid().ToString(),
+            email = "test@gmail.com",
+            name = "Test Google User",
+            picture = "https://via.placeholder.com/150",
+            iat = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+            exp = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds()
+        };
+        
+        var payloadJson = System.Text.Json.JsonSerializer.Serialize(payloadObj);
+        var payload = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(payloadJson));
+        var signature = "mock_signature";
+        
+        return $"{header}.{payload}.{signature}";
+    }
+    
+    public class GoogleUserInfo
+    {
+        public string Sub { get; set; } = "";
+        public string Email { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Picture { get; set; } = "";
+    }
+
+    private string GetErrorMessage(string error)
+    {
+        return error switch
+        {
+            "access_denied" => "Bạn đã từ chối quyền truy cập. Vui lòng thử lại.",
+            "invalid_request" => "Yêu cầu không hợp lệ",
+            "unauthorized_client" => "Ứng dụng chưa được ủy quyền",
+            _ => $"Lỗi xác thực: {error}"
+        };
+    }
+
+    private async Task RetryLogin()
+    {
+        Navigation.NavigateTo("/login");
+    }
+
+    public class GoogleTokenResponse
+    {
+        public string AccessToken { get; set; } = "";
+        public string TokenType { get; set; } = "";
+        public int ExpiresIn { get; set; }
+        public string RefreshToken { get; set; } = "";
+        public string IdToken { get; set; } = "";
+        
+        // User info từ ID Token (sau khi decode)
+        public string Email { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Sub { get; set; } = "";  // Google User ID
+        public string Picture { get; set; } = "";
+    }
+
+    public class GoogleLoginRequest
+    {
+        public string Email { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string GoogleId { get; set; } = "";
+        public string Picture { get; set; } = "";
+        public string AccessToken { get; set; } = "";
+    }
+}

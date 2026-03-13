@@ -1,0 +1,472 @@
+@using WebUI.Components
+@using WebUI.Services
+@using WebUI.Services.Interfaces
+@using WebUI.Models.Cart
+@inject CartService CartService
+@inject IAuthService AuthService
+@inject IProductService ProductService
+@inject NavigationManager Navigation
+@inject IToastService ToastService
+@implements IDisposable
+
+<!-- Header Component -->
+<header class="header">
+    <div class="header-container">
+        <a href="/" class="logo">Asion</a>
+        
+        <nav>
+            <ul class="nav-menu">
+                <li><a href="/">Trang chủ</a></li>
+                <li class="dropdown-menu-item">
+                    <a href="#" @onclick:preventDefault @onclick="ToggleCategoryDropdown">Danh mục <i class="fas fa-chevron-down"></i></a>
+                    @if (ShowCategoryDropdown)
+                    {
+                        <div class="dropdown-overlay" @onclick="CloseCategoryDropdown">
+                            <div class="mega-dropdown mega-dropdown-centered" @onclick:stopPropagation="true">
+                                <div class="mega-dropdown-content">
+                                    <div class="categories-column">
+                                        <h4>Danh Mục</h4>
+                                        <ul class="category-list" style="max-height: 400px; overflow-y: auto;">
+                                            @foreach (var category in CategoryList)
+                                            {
+                                                <button type="button"
+                                                        @onclick="async () => await LoadCategoryProducts(category)"
+                                                        tabindex="0"
+                                                        class="category-item @(SelectedCategoryId == category.Id ? "active" : "")"
+                                                        style="cursor: pointer; padding: 8px 16px; width: 100%; text-align: left; background: none; border: none;">
+                                                    <i class="@category.Icon"></i>
+                                                    <span>@category.Name</span>
+                                                    <span class="count">(@category.Count)</span>
+                                                </button>
+                                            }
+                                        </ul>
+                                    </div>
+                                    <div class="products-column">
+                                        @if (SelectedCategoryId.HasValue && CategoryProducts.Any())
+                                        {
+                                            <h4>Sản phẩm nổi bật</h4>
+                                            <div class="products-preview">
+                                                @foreach (var product in CategoryProducts.Take(9))
+                                                {
+                                                    <a href="/product/@product.Id" class="product-preview-card">
+                                                        <img src="@product.ImageUrl" alt="@product.Name" />
+                                                        <div class="product-preview-info">
+                                                            <h5>@product.Name</h5>
+                                                            <p class="brand">@product.Brand</p>
+                                                            <p class="price">@product.PriceFormatted</p>
+                                                        </div>
+                                                    </a>
+                                                }
+                                            </div>
+                                            <a href="/shop?category=@SelectedCategoryId" class="view-all-btn">
+                                                Xem tất cả <i class="fas fa-arrow-right"></i>
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            <div class="no-products">
+                                                <i class="fas fa-box-open"></i>
+                                                <p>Di chuột qua danh mục để xem sản phẩm</p>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </li>
+                <li><a href="/shop">Cửa hàng</a></li>
+            </ul>
+        </nav>
+
+        <div class="header-icons">
+            <!-- User Dropdown Component -->
+            <UserDropdown />
+            
+            <div class="cart-icon" @onclick="OnCartClick">
+                <i class="fas fa-shopping-bag"></i>
+                @if (CartItemsCount > 0)
+                {
+                    <span class="cart-badge">@CartItemsCount</span>
+                }
+            </div>
+        </div>
+    </div>
+</header>
+
+
+<!-- Cart Summary Dropdown -->
+@if (ShowCartSummary)
+{
+    <div class="cart-dropdown-overlay" @onclick="() => OnCartSummaryVisibilityChanged(false)">
+        <div class="cart-dropdown-content" @onclick:stopPropagation="true">
+            <div class="cart-header">
+                <h3>Giỏ hàng (@CartItemsCount sản phẩm)</h3>
+                <button class="close-btn" @onclick="() => OnCartSummaryVisibilityChanged(false)">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            @if (CartItemsCount > 0)
+            {
+                <div class="cart-items-list">
+                    @if (AuthService?.IsAuthenticated == true && ApiCart?.Items != null)
+                    {
+                        @* Render API Cart Items *@
+                        @foreach (var apiItem in ApiCart.Items)
+                        {
+                            <div class="cart-item-row">
+                                <img src="@apiItem.ImageUrl" alt="@apiItem.ProductName" class="item-thumb" />
+                                <div class="item-info">
+                                    <h4>@apiItem.ProductName</h4>
+                                    <p>@apiItem.Brand</p>
+                                    @if (!string.IsNullOrEmpty(apiItem.Size) || !string.IsNullOrEmpty(apiItem.Color))
+                                    {
+                                        <div class="item-options">
+                                            @if (!string.IsNullOrEmpty(apiItem.Size))
+                                            {
+                                                <span class="option-badge">Size: @apiItem.Size</span>
+                                            }
+                                            @if (!string.IsNullOrEmpty(apiItem.Color))
+                                            {
+                                                <span class="option-badge">
+                                                    @if (!string.IsNullOrEmpty(apiItem.ColorHex))
+                                                    {
+                                                        <span class="color-preview" style="background-color: @apiItem.ColorHex; border: 1px solid #dee2e6;"></span>
+                                                    }
+                                                    @apiItem.Color
+                                                </span>
+                                            }
+                                        </div>
+                                    }
+                                    <div class="item-price-qty">
+                                        <span>@apiItem.PriceFormatted x @apiItem.Quantity</span>
+                                    </div>
+                                </div>
+                                <button class="remove-item-btn" @onclick="() => RemoveApiCartItem(apiItem.CartItemID)">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        @* Render Local Cart Items *@
+                        @foreach (var item in LocalCartItems)
+                        {
+                            <div class="cart-item-row">
+                                <img src="@item.Product.ImageUrl" alt="@item.Product.Name" class="item-thumb" />
+                                <div class="item-info">
+                                    <h4>@item.Product.Name</h4>
+                                    <p>@item.Product.Brand</p>
+                                    @if (!string.IsNullOrEmpty(item.SelectedSize) || !string.IsNullOrEmpty(item.SelectedColor))
+                                    {
+                                        <div class="item-options">
+                                            @if (!string.IsNullOrEmpty(item.SelectedSize))
+                                            {
+                                                <span class="option-badge">Size: @item.SelectedSize</span>
+                                            }
+                                            @if (!string.IsNullOrEmpty(item.SelectedColor))
+                                            {
+                                                <span class="option-badge">
+                                                    <span class="color-preview" style="background-color: @item.SelectedColor; border: 1px solid #dee2e6;"></span>
+                                                    @GetColorName(item.SelectedColor)
+                                                </span>
+                                            }
+                                        </div>
+                                    }
+                                    <div class="item-price-qty">
+                                        <span>@item.Product.PriceFormatted x @item.Quantity</span>
+                                    </div>
+                                </div>
+                                <button class="remove-item-btn" @onclick="() => RemoveCartItem(item.Product.Id)">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        }
+                    }
+                </div>
+                
+                <div class="cart-footer">
+                    <div class="cart-total">
+                        <strong>Tổng: @GetCartTotal()</strong>
+                    </div>
+                    <div class="cart-actions">
+                        <button class="btn btn-outline" @onclick="ViewCart">Xem giỏ hàng</button>
+                        <button class="btn btn-primary" @onclick="Checkout">Thanh toán</button>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="empty-cart">
+                    <i class="fas fa-shopping-bag"></i>
+                    <p>Giỏ hàng trống</p>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private int CartItemsCount = 0;
+    private bool ShowCartSummary = false;
+    private CartSummaryResponse? ApiCart = null;
+    private List<WebUI.Services.CartItem> LocalCartItems = new();
+    
+    // Category dropdown
+    private bool ShowCategoryDropdown = false;
+    private int? SelectedCategoryId = null;
+    private string SelectedCategoryName = "";
+    private List<Product> CategoryProducts = new();
+    private List<CategoryItem> CategoryList = new();
+
+    private async Task LoadCategoriesAsync()
+    {
+        try
+        {
+            var response = await ProductService.GetCategoriesAsync();
+            if (response?.Success == true && response.Data != null)
+            {
+                CategoryList = response.Data.Select(c => new CategoryItem 
+                {
+                    Id = c.CategoryID,
+                    Name = c.Name,
+                    Count = c.Count, 
+                    Icon = c.Icon ?? "fas fa-tags" 
+                }).ToList();
+            }
+        }
+        catch (Exception )
+        {
+            CategoryList = new(); // Initialize empty list if API fails
+        }
+    }
+   
+
+    protected override async Task OnInitializedAsync()
+    {
+        CartService.OnCartChanged += UpdateCart;
+        AuthService.AuthStateChanged += OnAuthStateChanged;
+        
+        // Wait for AuthService to initialize
+        await Task.Delay(100);
+        await LoadCartAsync();
+        await LoadCategoriesAsync();
+    }
+
+    private async void OnAuthStateChanged(object? sender, bool isAuthenticated)
+    {
+        await LoadCartAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadCartAsync()
+    {
+        try
+        {
+            if (AuthService?.IsAuthenticated == true)
+            {
+                ApiCart = await CartService.GetCartFromApiAsync();
+                CartItemsCount = ApiCart?.TotalItems ?? 0;
+                LocalCartItems.Clear();
+            }
+            else
+            {
+                ApiCart = null;
+                LocalCartItems = CartService.GetItems();
+                CartItemsCount = CartService.GetTotalItems();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Header] Error loading cart: {ex.Message}");
+            LocalCartItems = CartService.GetItems();
+            CartItemsCount = CartService.GetTotalItems();
+            ApiCart = null;
+        }
+    }
+
+    private async void UpdateCart()
+    {
+        await LoadCartAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnCartClick()
+    {
+        ShowCartSummary = !ShowCartSummary;
+        
+        if (ShowCartSummary)
+        {
+            await LoadCartAsync();
+        }
+        
+        StateHasChanged();
+    }
+
+    private void OnCartSummaryVisibilityChanged(bool isVisible)
+    {
+        ShowCartSummary = isVisible;
+        StateHasChanged();
+    }
+
+    private void RemoveCartItem(int productId)
+    {
+        CartService.RemoveItem(productId);
+    }
+
+    private async Task RemoveApiCartItem(int cartItemId)
+    {
+        var success = await CartService.RemoveCartItemAsync(cartItemId);
+        
+        if (success)
+        {
+            await ToastService.ShowSuccess("Đã xóa sản phẩm khỏi giỏ hàng");
+            await LoadCartAsync();
+            StateHasChanged();
+        }
+        else
+        {
+            await ToastService.ShowError("Không thể xóa sản phẩm. Vui lòng thử lại.");
+        }
+    }
+
+    private string GetCartTotal()
+    {
+        if (AuthService?.IsAuthenticated == true && ApiCart != null)
+        {
+            return $"{ApiCart.TotalAmount:N0}đ";
+        }
+        return $"{CartService.GetTotalPrice():N0}đ";
+    }
+
+    private void ViewCart()
+    {
+        // Navigate to cart page
+        ShowCartSummary = false;
+        Navigation.NavigateTo("/cart");
+    }
+
+    private void Checkout()
+    {
+        // Navigate to checkout
+        ShowCartSummary = false;
+        Navigation.NavigateTo("/checkout");
+    }
+
+    private string GetColorName(string colorHex)
+    {
+        return colorHex.ToUpper() switch
+        {
+            "#000000" => "Đen",
+            "#FFFFFF" => "Trắng",
+            "#808080" => "Xám", 
+            "#000080" => "Xanh Navy",
+            "#FF0000" => "Đỏ",
+            "#008000" => "Xanh Lá",
+            "#0000FF" => "Xanh Dương",
+            "#FFFF00" => "Vàng",
+            "#FFA500" => "Cam",
+            "#800080" => "Tím",
+            "#A52A2A" => "Nâu",
+            "#FFC0CB" => "Hồng",
+            "#00FF00" => "Xanh Lá Cây",
+            "#C0C0C0" => "Bạc",
+            _ => "Màu khác"
+        };
+    }
+
+    // Dropdown now uses hover and overlay click to close
+    private void ToggleCategoryDropdown()
+    {
+        ShowCategoryDropdown = !ShowCategoryDropdown;
+    }
+
+    private void CloseCategoryDropdown()
+    {
+        ShowCategoryDropdown = false;
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        Navigation.LocationChanged -= HandleLocationChanged;
+        Navigation.LocationChanged += HandleLocationChanged;
+    }
+
+    private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        ShowCategoryDropdown = false;
+        StateHasChanged();
+    }
+
+    private async Task LoadCategoryProducts(CategoryItem category)
+    {
+         Console.WriteLine($"[Header] LoadCategoryProducts called");
+         Console.WriteLine($"{category}");
+
+        if (category == null) return;
+        
+        try
+        {
+            Console.WriteLine($"[Header] Mouse entered category: {category.Name} (ID: {category.Id})");
+            
+            // Cập nhật UI ngay lập tức để hiển thị trạng thái loading
+            SelectedCategoryId = category.Id;
+            SelectedCategoryName = category.Name;
+            CategoryProducts = new List<Product>();
+            StateHasChanged();
+
+            Console.WriteLine($"[Header] Calling API GetAllProductsAsync with categoryId: {category.Id}");
+
+            // Gọi API để lấy sản phẩm
+            var products = await ProductService.GetAllProductsAsync(
+                categoryId: category.Id,
+                currentPage: 1,
+                recordPerPage: 9
+            );
+
+            Console.WriteLine($"[Header] API response received. Products count: {products?.Count ?? 0}");
+
+            if (products != null && products.Any())
+            {
+                CategoryProducts = products;
+                Console.WriteLine($"[Header] First product: {products.First().Name}, Price: {products.First().PriceFormatted}");
+                foreach (var product in products)
+                {
+                    Console.WriteLine($"[Header] - {product.Name} ({product.Id})");
+                }
+            }
+            else
+            {
+                Console.WriteLine("[Header] No products returned from API");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Header] Error loading products: {ex.Message}");
+            Console.WriteLine($"[Header] Stack trace: {ex.StackTrace}");
+            CategoryProducts = new List<Product>();
+        }
+        finally
+        {
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        CartService.OnCartChanged -= UpdateCart;
+        AuthService.AuthStateChanged -= OnAuthStateChanged;
+    }
+    
+    public class CategoryItem
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Icon { get; set; } = "";
+        public int Count { get; set; }
+    }
+
+    
+}

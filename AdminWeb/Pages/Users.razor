@@ -1,0 +1,939 @@
+@page "/users"
+@inject AdminWeb.Services.UserService UserService
+@inject AdminWeb.Services.ToastService Toast
+@inject IJSRuntime JSRuntime
+@using AdminWeb.Models
+
+<PageTitle>Người dùng - Asion Shop</PageTitle>
+
+<link href="css/users.css" rel="stylesheet" />
+<link href="css/modal-styles.css" rel="stylesheet" />
+
+<div class="users-page space-y-8">
+    <!-- Stats Row -->
+    <div class="stat-row">
+        <div class="stat-card total">
+            <div class="icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512" width="24" height="24" fill="currentColor">
+                    <path d="M144 0a80 80 0 1 1 0 160A80 80 0 1 1 144 0zM512 0a80 80 0 1 1 0 160A80 80 0 1 1 512 0zM0 298.7C0 239.8 47.8 192 106.7 192h42.7c15.9 0 31 3.5 44.6 9.7c-1.3 7.2-1.9 14.7-1.9 22.3c0 38.2 16.8 72.5 43.3 96c-.2 0-.4 0-.7 0H21.3C9.6 320 0 310.4 0 298.7zM405.3 320c-.2 0-.4 0-.7 0c26.6-23.5 43.3-57.8 43.3-96c0-7.6-.7-15-1.9-22.3c13.6-6.3 28.7-9.7 44.6-9.7h42.7C592.2 192 640 239.8 640 298.7c0 11.8-9.6 21.3-21.3 21.3H405.3zM224 224a96 96 0 1 1 192 0 96 96 0 1 1 -192 0zM128 485.3C128 411.7 187.7 352 261.3 352H378.7C452.3 352 512 411.7 512 485.3c0 14.7-11.9 26.7-26.7 26.7H154.7c-14.7 0-26.7-11.9-26.7-26.7z"/>
+                </svg>
+            </div>
+            <div class="info">
+                <p>Tổng người dùng</p>
+                <h4>@totalRecords</h4>
+            </div>
+        </div>
+        <div class="stat-card active">
+            <div class="icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="24" height="24" fill="currentColor">
+                    <path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209L241 337c-9.4 9.4-24.6 9.4-33.9 0l-64-64c-9.4-9.4-9.4-24.6 0-33.9s24.6-9.4 33.9 0l47 47L335 175c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9z"/>
+                </svg>
+            </div>
+            <div class="info">
+                <p>Đang hoạt động</p>
+                <h4>@users.Count(u => u.Status == 0)</h4>
+            </div>
+        </div>
+        <div class="stat-card locked">
+            <div class="icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" width="22" height="22" fill="currentColor">
+                    <path d="M144 144v48H304V144c0-44.2-35.8-80-80-80s-80 35.8-80 80zM80 192V144C80 64.5 144.5 0 224 0s144 64.5 144 144v48h16c35.3 0 64 28.7 64 64V448c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V256c0-35.3 28.7-64 64-64H80z"/>
+                </svg>
+            </div>
+            <div class="info">
+                <p>Bị khóa</p>
+                <h4>@users.Count(u => u.Status == 1)</h4>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar enhanced">
+        <div class="filter-inner">
+            <div class="filter-left">
+                <h2 class="filter-title">Danh sách người dùng</h2>
+            </div>
+            <div class="filter-right">
+                <div class="relative filter-input-wrapper">
+                    <input type="text" @bind="searchKeyword" @bind:event="oninput" @onkeydown="HandleKeyDown" class="filter-input" placeholder="Tìm tên, email, SĐT..." />
+                    <button type="button" @onclick="SearchUsers" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600" aria-label="Tìm kiếm">
+                        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="14" height="14" fill="currentColor"><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352a144 144 0 1 0 0-288 144 144 0 1 0 0 288z"/></svg>
+                    </button>
+                    @if (!string.IsNullOrWhiteSpace(searchKeyword))
+                    {
+                        <button type="button" class="filter-clear-btn" @onclick="ClearSearch">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" width="12" height="12" fill="currentColor"><path d="M342.6 150.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L192 210.7 86.6 105.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L146.7 256 41.4 361.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L192 301.3 297.4 406.6c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L237.3 256 342.6 150.6z"/></svg>
+                        </button>
+                    }
+                </div>
+                <select @bind="filterStatus" class="filter-select">
+                    <option value="">Tất cả trạng thái</option>
+                    <option value="1">Hoạt động</option>
+                    <option value="0">Đã khóa</option>
+                </select>
+                <button type="button" @onclick="OpenAddUserModal" class="btn btn-primary d-flex align-items-center gap-2" style="height:38px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" width="14" height="14" fill="currentColor">
+                        <path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32V224H48c-17.7 0-32 14.3-32 32s14.3 32 32 32H192V432c0 17.7 14.3 32 32 32s32-14.3 32-32V288H400c17.7 0 32-14.3 32-32s-14.3-32-32-32H256V80z"/>
+                    </svg>
+                    Thêm người dùng
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Users Table -->
+    <div class="users-panel full-width-edge">
+        <div class="relative flex flex-col bg-white shadow-xl rounded-none md:rounded-2xl">
+            <div class="flex-auto p-6">
+                @if (loading)
+                {
+                    <div class="flex items-center justify-center py-20">
+                        <div class="animate-spin rounded-full h-14 w-14 border-t-2 border-b-2 border-blue-500"></div>
+                    </div>
+                }
+                else
+                {
+                    <div class="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
+                        <table class="users-table w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50 sticky top-0 z-10">
+                                <tr>
+                                    <th scope="col" class="px-5 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Người dùng</th>
+                                    <th scope="col" class="px-5 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Liên hệ</th>
+                                    <th scope="col" class="px-5 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Vai trò</th>
+                                    <th scope="col" class="px-5 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Trạng thái</th>
+                                    <th scope="col" class="px-5 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Thao tác</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 bg-white">
+                                @foreach (var user in users)
+                                {
+                                    <tr class="group hover:bg-gray-50 transition">
+                                        <td class="px-5 py-4">
+                                            <div class="flex items-center gap-3">
+                                                <div class="flex-shrink-0">
+                                                    @if (!string.IsNullOrEmpty(user.Picture))
+                                                    {
+                                                        <img src="@user.Picture" alt="@user.UserName" class="w-10 h-10 rounded-full object-cover" />
+                                                    }
+                                                    else
+                                                    {
+                                                        <div class="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-semibold">
+                                                            @GetInitials(user.UserName)
+                                                        </div>
+                                                    }
+                                                </div>
+                                                <div>
+                                                    <p class="text-sm font-semibold text-gray-900">@user.UserName</p>
+                                                    <p class="text-xs text-gray-500">ID: @user.Id</p>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="px-5 py-4">
+                                            <p class="text-sm text-gray-800">@user.Email</p>
+                                            <p class="text-xs text-gray-500">@user.PhoneNumber</p>
+                                        </td>
+                                        <td class="px-5 py-4">
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium @GetRoleBadgeClass(user.RoleName)">
+                                                @user.RoleName
+                                            </span>
+                                        </td>
+                                        <td class="px-5 py-4 text-center">
+                                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold @GetStatusClass(user.Status)">
+                                                @GetStatusText(user.Status)
+                                            </span>
+                                        </td>
+                                        <td class="px-5 py-4 text-center">
+                                            <div class="flex items-center justify-center gap-1">
+                                                <button @onclick="() => OpenDetailModal(user)" class="action-btn btn-view" title="Chi tiết">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512" width="16" height="16" fill="currentColor"><path d="M572.52 241.4C518.9 135.59 407.81 64 288 64 168.19 64 57.1 135.59 3.48 241.4a32.35 32.35 0 0 0 0 29.2C57.1 376.41 168.19 448 288 448c119.81 0 230.9-71.59 284.52-177.4a32.35 32.35 0 0 0 0-29.2zM288 400c-97 0-176-79-176-176S191 48 288 48s176 79 176 176-79 176-176 176zm0-304a128 128 0 1 0 128 128A128 128 0 0 0 288 96z"/></svg>
+                                                </button>
+                                                <button @onclick="() => OpenEditModal(user)" class="action-btn btn-edit" title="Chỉnh sửa">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="14" height="14" fill="currentColor"><path d="M362.7 19.3L314.3 67.7 444.3 197.7l48.4-48.4c25-25 25-65.5 0-90.5L453.3 19.3c-25-25-65.5-25-90.5 0zm-71 71L58.6 323.5c-10.4 10.4-18 23.3-22.2 37.4L1 481.2C-1.5 489.7 .8 498.8 7 505s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L421.7 220.3 291.7 90.3z"/></svg>
+                                                </button>
+                                                @if (user.Status == 1)
+                                                {
+                                                    <button @onclick="() => ConfirmStatusChange(user, 0)" class="action-btn btn-reject" title="Khóa tài khoản">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" width="14" height="14" fill="currentColor"><path d="M144 144v48H304V144c0-44.2-35.8-80-80-80s-80 35.8-80 80zM80 192V144C80 64.5 144.5 0 224 0s144 64.5 144 144v48h16c35.3 0 64 28.7 64 64V448c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V256c0-35.3 28.7-64 64-64H80z"/></svg>
+                                                    </button>
+                                                }
+                                                else
+                                                {
+                                                    <button @onclick="() => ConfirmStatusChange(user, 1)" class="action-btn btn-accept" title="Mở khóa">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512" width="14" height="14" fill="currentColor"><path d="M352 144c0-44.2 35.8-80 80-80s80 35.8 80 80v48c0 17.7 14.3 32 32 32s32-14.3 32-32V144C576 64.5 511.5 0 432 0S288 64.5 288 144v48H64c-35.3 0-64 28.7-64 64V448c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V256c0-35.3-28.7-64-64-64H352V144z"/></svg>
+                                                    </button>
+                                                }
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="mt-6 flex justify-center">
+                        <Pagination CurrentPage="@currentPage" TotalItems="@totalRecords" ItemsPerPage="@pageSize" OnPageChanged="@OnPageChanged" />
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Detail Modal -->
+@if (showDetailModal && selectedUser != null)
+{
+    <div class="modal fade show d-flex align-items-center justify-content-center" tabindex="-1" role="dialog" aria-modal="true" style="display:flex !important; background:rgba(0,0,0,0.5);" @onclick="CloseDetailModal">
+        <div class="modal-dialog modal-lg" role="document" @onclick:stopPropagation>
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" width="18" height="18" fill="#3b82f6">
+                            <path d="M224 256A128 128 0 1 0 224 0a128 128 0 1 0 0 256zm-45.7 48C79.8 304 0 383.8 0 482.3C0 498.7 13.3 512 29.7 512H418.3c16.4 0 29.7-13.3 29.7-29.7C448 383.8 368.2 304 269.7 304H178.3z"/>
+                        </svg>
+                        Chi tiết người dùng
+                    </h5>
+                    <button type="button" class="btn-close" aria-label="Đóng" @onclick="CloseDetailModal"></button>
+                </div>
+
+                <div class="modal-body">
+                    <!-- User Avatar & Name -->
+                    <div class="d-flex align-items-center gap-3 mb-4 pb-3 border-bottom">
+                        <div>
+                            @if (!string.IsNullOrEmpty(selectedUser.Picture))
+                            {
+                                <img src="@selectedUser.Picture" alt="@selectedUser.UserName" class="rounded-circle" style="width:80px;height:80px;object-fit:cover;" />
+                            }
+                            else
+                            {
+                                <div class="rounded-circle d-flex align-items-center justify-center text-white fw-bold" style="width:80px;height:80px;background:#3b82f6;font-size:2rem;">
+                                    @GetInitials(selectedUser.UserName)
+                                </div>
+                            }
+                        </div>
+                        <div class="flex-grow-1">
+                            <h4 class="mb-1 fw-bold">@selectedUser.UserName</h4>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <span class="badge @GetRoleBadgeClass(selectedUser.RoleName)">@selectedUser.RoleName</span>
+                                <span class="badge @GetStatusClass(selectedUser.Status)">@GetStatusText(selectedUser.Status)</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3">
+                        <!-- Contact Info -->
+                        <div class="col-md-6">
+                            <div class="detail-info-row">
+                                <div class="detail-info-label">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="12" height="12" fill="currentColor" class="me-1"><path d="M48 64C21.5 64 0 85.5 0 112c0 15.1 7.1 29.3 19.2 38.4L236.8 313.6c11.4 8.5 27 8.5 38.4 0L492.8 150.4c12.1-9.1 19.2-23.3 19.2-38.4c0-26.5-21.5-48-48-48H48zM0 176V384c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V176L294.4 339.2c-22.8 17.1-54 17.1-76.8 0L0 176z"/></svg>
+                                    Email
+                                </div>
+                                <div class="detail-info-value">@selectedUser.Email</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="detail-info-row">
+                                <div class="detail-info-label">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="12" height="12" fill="currentColor" class="me-1"><path d="M164.9 24.6c-7.7-18.6-28-28.5-47.4-23.2l-88 24C12.1 30.2 0 46 0 64C0 311.4 200.6 512 448 512c18 0 33.8-12.1 38.6-29.5l24-88c5.3-19.4-4.6-39.7-23.2-47.4l-96-40c-16.3-6.8-35.2-2.1-46.3 11.6L304.7 368C234.3 334.7 177.3 277.7 144 207.3L193.3 167c13.7-11.2 18.4-30 11.6-46.3l-40-96z"/></svg>
+                                    Điện thoại
+                                </div>
+                                <div class="detail-info-value">@selectedUser.PhoneNumber</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="detail-info-row">
+                                <div class="detail-info-label">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" width="12" height="12" fill="currentColor" class="me-1"><path d="M152 24c0-13.3-10.7-24-24-24s-24 10.7-24 24V64H64C28.7 64 0 92.7 0 128v16 48V448c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V192 144 128c0-35.3-28.7-64-64-64H344V24c0-13.3-10.7-24-24-24s-24 10.7-24 24V64H152V24z"/></svg>
+                                    Ngày sinh
+                                </div>
+                                <div class="detail-info-value">@(selectedUser.DateOfBirth?.ToString("dd/MM/yyyy") ?? "Chưa cập nhật")</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="detail-info-row">
+                                <div class="detail-info-label">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="12" height="12" fill="currentColor" class="me-1"><path d="M256 0a256 256 0 1 1 0 512A256 256 0 1 1 256 0zM232 120V256c0 8 4 15.5 10.7 20l96 64c11 7.4 25.9 4.4 33.3-6.7s4.4-25.9-6.7-33.3L280 243.2V120c0-13.3-10.7-24-24-24s-24 10.7-24 24z"/></svg>
+                                    Ngày tạo
+                                </div>
+                                <div class="detail-info-value">@selectedUser.CreatedAt.ToString("dd/MM/yyyy HH:mm")</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (selectedUser.Address != null && selectedUser.Address.Any())
+                    {
+                        <div class="mt-4">
+                            <h6 class="fw-bold mb-3">Địa chỉ</h6>
+                            @foreach (var addr in selectedUser.Address)
+                            {
+                                <div class="alert alert-light mb-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" width="12" height="12" fill="currentColor" class="me-2"><path d="M215.7 499.2C267 435 384 279.4 384 192C384 86 298 0 192 0S0 86 0 192c0 87.4 117 243 168.3 307.2c12.3 15.3 35.1 15.3 47.4 0zM192 128a64 64 0 1 1 0 128 64 64 0 1 1 0-128z"/></svg>
+                                    <strong>@addr.AddressDetail</strong><br/>
+                                    <small class="text-muted">@addr.Street, @addr.Ward, @addr.District, @addr.City</small>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseDetailModal">Đóng</button>
+                    @if (selectedUser.Status == 1)
+                    {
+                        <button type="button" class="btn btn-danger" @onclick="() => CloseDetailAndConfirmStatus(selectedUser, 0)">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" width="12" height="12" fill="currentColor"><path d="M144 144v48H304V144c0-44.2-35.8-80-80-80s-80 35.8-80 80zM80 192V144C80 64.5 144.5 0 224 0s144 64.5 144 144v48h16c35.3 0 64 28.7 64 64V448c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V256c0-35.3 28.7-64 64-64H80z"/></svg>
+                            Khóa tài khoản
+                        </button>
+                    }
+                    else
+                    {
+                        <button type="button" class="btn btn-success" @onclick="() => CloseDetailAndConfirmStatus(selectedUser, 1)">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512" width="12" height="12" fill="currentColor"><path d="M352 144c0-44.2 35.8-80 80-80s80 35.8 80 80v48c0 17.7 14.3 32 32 32s32-14.3 32-32V144C576 64.5 511.5 0 432 0S288 64.5 288 144v48H64c-35.3 0-64 28.7-64 64V448c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V256c0-35.3-28.7-64-64-64H352V144z"/></svg>
+                            Mở khóa
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Status Change Confirm Modal -->
+@if (showStatusConfirm && userToChange != null)
+{
+    <div class="modal fade show d-flex align-items-center justify-content-center" tabindex="-1" style="display:flex !important; background:rgba(0,0,0,0.5);" @onclick="CloseStatusConfirm">
+        <div class="modal-dialog modal-sm" @onclick:stopPropagation>
+            <div class="modal-content">
+                <div class="modal-header @(newStatus == 0 ? "bg-danger" : "bg-success") text-white py-2 px-3">
+                    <h5 class="modal-title">Xác nhận @(newStatus == 0 ? "khóa" : "mở khóa")</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseStatusConfirm"></button>
+                </div>
+                <div class="modal-body py-3">
+                    <p class="mb-2">Bạn có chắc chắn muốn <strong>@(newStatus == 0 ? "khóa" : "mở khóa")</strong> tài khoản:</p>
+                    <div class="alert @(newStatus == 0 ? "alert-danger" : "alert-success") mb-0 p-2">
+                        <strong>@userToChange.UserName</strong><br/>
+                        <small>@userToChange.Email</small>
+                    </div>
+                </div>
+                <div class="modal-footer py-2 px-3">
+                    <button type="button" class="btn btn-sm btn-secondary" @onclick="CloseStatusConfirm">Hủy</button>
+                    <button type="button" class="btn btn-sm @(newStatus == 0 ? "btn-danger" : "btn-success")" disabled="@isChanging" @onclick="ChangeStatusAsync">
+                        @(isChanging ? "Đang xử lý..." : "Xác nhận")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Add User Modal -->
+@if (showAddUserModal)
+{
+    <div class="modal fade show d-flex align-items-center justify-content-center" tabindex="-1" role="dialog" aria-modal="true" style="display:flex !important; background:rgba(0,0,0,0.5);" @onclick="CloseAddUserModal">
+        <div class="modal-dialog modal-lg" role="document" @onclick:stopPropagation>
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512" width="18" height="18" fill="currentColor" class="me-2">
+                            <path d="M96 128a128 128 0 1 1 256 0A128 128 0 1 1 96 128zM0 482.3C0 383.8 79.8 304 178.3 304h91.4C368.2 304 448 383.8 448 482.3c0 16.4-13.3 29.7-29.7 29.7H29.7C13.3 512 0 498.7 0 482.3zM504 312V248H440c-13.3 0-24-10.7-24-24s10.7-24 24-24h64V136c0-13.3 10.7-24 24-24s24 10.7 24 24v64h64c13.3 0 24 10.7 24 24s-10.7 24-24 24H552v64c0 13.3-10.7 24-24 24s-24-10.7-24-24z"/>
+                        </svg>
+                        Thêm người dùng mới
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" aria-label="Đóng" @onclick="CloseAddUserModal"></button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Họ và tên <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" @bind="newUser.FullName" placeholder="Nhập họ tên" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Tên đăng nhập <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" @bind="newUser.Username" placeholder="Nhập tên đăng nhập" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Email <span class="text-danger">*</span></label>
+                            <input type="email" class="form-control" @bind="newUser.Email" placeholder="Nhập email" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Số điện thoại <span class="text-danger">*</span></label>
+                            <input type="tel" class="form-control" @bind="newUser.Phone" placeholder="Nhập số điện thoại" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Mật khẩu <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" @bind="newUser.Password" placeholder="Nhập mật khẩu (tối thiểu 6 ký tự)" />
+                            <small class="text-muted">Mật khẩu phải có ít nhất 6 ký tự</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Ngày sinh</label>
+                            <input type="date" class="form-control" @bind="newUser.DateOfBirth" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Vai trò <span class="text-danger">*</span></label>
+                            <div class="role-selection-group">
+                                @foreach (var role in roles)
+                                {
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" 
+                                               id="role_@role.RoleId" 
+                                               checked="@selectedRoles.Contains(role.RoleName)"
+                                               @onchange="() => ToggleRole(role.RoleName)" />
+                                        <label class="form-check-label" for="role_@role.RoleId">
+                                            @role.RoleName
+                                        </label>
+                                    </div>
+                                }
+                            </div>
+                            @if (selectedRoles.Count > 0)
+                            {
+                                <small class="text-muted mt-2 d-block">Đã chọn: @string.Join(", ", selectedRoles)</small>
+                            }
+                        </div>
+                    </div>
+                    
+                    @if (!string.IsNullOrWhiteSpace(addUserError))
+                    {
+                        <div class="alert alert-danger mt-3 mb-0">
+                            @addUserError
+                        </div>
+                    }
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseAddUserModal" disabled="@isAdding">Hủy</button>
+                    <button type="button" class="btn btn-primary" @onclick="AddUserAsync" disabled="@isAdding">
+                        @if (isAdding)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            <span>Đang thêm...</span>
+                        }
+                        else
+                        {
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" width="14" height="14" fill="currentColor" class="me-1">
+                                <path d="M438.6 105.4c12.5 12.5 12.5 32.8 0 45.3l-256 256c-12.5 12.5-32.8 12.5-45.3 0l-128-128c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0L160 338.7 393.4 105.4c12.5-12.5 32.8-12.5 45.3 0z"/>
+                            </svg>
+                            <span>Thêm người dùng</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Edit User Modal -->
+@if (showEditUserModal && editUser != null)
+{
+    <div class="modal fade show d-flex align-items-center justify-content-center" tabindex="-1" role="dialog" aria-modal="true" style="display:flex !important; background:rgba(0,0,0,0.5);" @onclick="CloseEditUserModal">
+        <div class="modal-dialog modal-lg" role="document" @onclick:stopPropagation>
+            <div class="modal-content">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="18" height="18" fill="currentColor" class="me-2">
+                            <path d="M362.7 19.3L314.3 67.7 444.3 197.7l48.4-48.4c25-25 25-65.5 0-90.5L453.3 19.3c-25-25-65.5-25-90.5 0zm-71 71L58.6 323.5c-10.4 10.4-18 23.3-22.2 37.4L1 481.2C-1.5 489.7 .8 498.8 7 505s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L421.7 220.3 291.7 90.3z"/>
+                        </svg>
+                        Chỉnh sửa người dùng
+                    </h5>
+                    <button type="button" class="btn-close" aria-label="Đóng" @onclick="CloseEditUserModal"></button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Họ và tên <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" @bind="editUser.FullName" placeholder="Nhập họ tên" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Tên đăng nhập <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" @bind="editUser.Username" placeholder="Nhập tên đăng nhập" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Email <span class="text-danger">*</span></label>
+                            <input type="email" class="form-control" @bind="editUser.Email" placeholder="Nhập email" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Số điện thoại <span class="text-danger">*</span></label>
+                            <input type="tel" class="form-control" @bind="editUser.Phone" placeholder="Nhập số điện thoại" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Mật khẩu mới</label>
+                            <input type="password" class="form-control" @bind="editUser.Password" placeholder="Để trống nếu không đổi" />
+                            <small class="text-muted">Để trống nếu không muốn thay đổi mật khẩu. Nếu đổi phải tối thiểu 6 ký tự</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Ngày sinh <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" @bind="editUser.DateOfBirth" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Trạng thái <span class="text-danger">*</span></label>
+                            <select class="form-select" @bind="editUser.Status">
+                                <option value="1">Hoạt động</option>
+                                <option value="0">Đã khóa</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Vai trò <span class="text-danger">*</span></label>
+                            <div class="role-selection-group">
+                                @foreach (var role in roles)
+                                {
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" 
+                                               id="edit_role_@role.RoleId" 
+                                               checked="@editSelectedRoles.Contains(role.RoleName)"
+                                               @onchange="() => ToggleEditRole(role.RoleName)" />
+                                        <label class="form-check-label" for="edit_role_@role.RoleId">
+                                            @role.RoleName
+                                        </label>
+                                    </div>
+                                }
+                            </div>
+                            @if (editSelectedRoles.Count > 0)
+                            {
+                                <small class="text-muted mt-2 d-block">Đã chọn: @string.Join(", ", editSelectedRoles)</small>
+                            }
+                        </div>
+                    </div>
+                    
+                    @if (!string.IsNullOrWhiteSpace(editUserError))
+                    {
+                        <div class="alert alert-danger mt-3 mb-0">
+                            @editUserError
+                        </div>
+                    }
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseEditUserModal" disabled="@isEditing">Hủy</button>
+                    <button type="button" class="btn btn-warning text-dark" @onclick="UpdateUserAsync" disabled="@isEditing">
+                        @if (isEditing)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            <span>Đang cập nhật...</span>
+                        }
+                        else
+                        {
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" width="14" height="14" fill="currentColor" class="me-1">
+                                <path d="M438.6 105.4c12.5 12.5 12.5 32.8 0 45.3l-256 256c-12.5 12.5-32.8 12.5-45.3 0l-128-128c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0L160 338.7 393.4 105.4c12.5-12.5 32.8-12.5 45.3 0z"/>
+                            </svg>
+                            <span>Cập nhật</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<GetListUserRes> users = new();
+    private int totalRecords = 0;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private bool loading = true;
+
+    private string searchKeyword = string.Empty;
+    private string filterStatus = string.Empty;
+
+    // Detail modal
+    private bool showDetailModal = false;
+    private GetListUserRes? selectedUser;
+
+    // Status change modal
+    private bool showStatusConfirm = false;
+    private GetListUserRes? userToChange;
+    private int newStatus = 0;
+    private bool isChanging = false;
+
+    // Add user modal
+    private bool showAddUserModal = false;
+    private AddUserRequest newUser = new();
+    private List<RoleDTO> roles = new();
+    private List<string> selectedRoles = new();
+    private bool isAdding = false;
+    private string addUserError = string.Empty;
+
+    // Edit user modal
+    private bool showEditUserModal = false;
+    private UpdateUserRequest? editUser;
+    private List<string> editSelectedRoles = new();
+    private bool isEditing = false;
+    private string editUserError = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUsers();
+        await LoadRoles();
+    }
+
+    private async Task LoadUsers()
+    {
+        loading = true;
+        
+        int? statusFilter = null;
+        if (!string.IsNullOrWhiteSpace(filterStatus))
+            statusFilter = int.Parse(filterStatus);
+
+        var response = await UserService.GetListUserAsync(
+            currentPage,
+            pageSize,
+            searchKeyword,
+            statusFilter,
+            string.Empty,
+            string.Empty
+        );
+
+        if (response.Success)
+        {
+            users = response.Data;
+            totalRecords = response.TotalRecords;
+        }
+        else
+        {
+            Toast.Error(response.Message);
+        }
+
+        loading = false;
+    }
+
+    private async Task OnPageChanged(int page)
+    {
+        currentPage = page;
+        await LoadUsers();
+    }
+
+    private async Task SearchUsers()
+    {
+        currentPage = 1;
+        await LoadUsers();
+    }
+
+    private async Task ClearSearch()
+    {
+        searchKeyword = string.Empty;
+        currentPage = 1;
+        await LoadUsers();
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await SearchUsers();
+        }
+    }
+
+    private async Task OpenDetailModal(GetListUserRes user)
+    {
+        selectedUser = user;
+        showDetailModal = true;
+        await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.add('modal-open')");
+    }
+
+    private async Task CloseDetailModal()
+    {
+        showDetailModal = false;
+        selectedUser = null;
+        await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.remove('modal-open')");
+    }
+
+    private async Task ConfirmStatusChange(GetListUserRes user, int status)
+    {
+        userToChange = user;
+        newStatus = status;
+        showStatusConfirm = true;
+        await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.add('modal-open')");
+    }
+
+    private async Task CloseStatusConfirm()
+    {
+        showStatusConfirm = false;
+        userToChange = null;
+        await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.remove('modal-open')");
+    }
+
+    private async Task CloseDetailAndConfirmStatus(GetListUserRes user, int status)
+    {
+        await CloseDetailModal();
+        await Task.Delay(100); // Small delay for smooth transition
+        await ConfirmStatusChange(user, status);
+    }
+
+    private async Task ChangeStatusAsync()
+    {
+        if (isChanging || userToChange == null) return;
+
+        isChanging = true;
+        var result = await UserService.ChangeUserStatusAsync(userToChange.Id, newStatus);
+        
+        if (result.Success)
+        {
+            Toast.Success(result.Message);
+            await CloseStatusConfirm();
+            await LoadUsers();
+        }
+        else
+        {
+            Toast.Error(result.Message);
+        }
+        
+        isChanging = false;
+    }
+
+    private string GetInitials(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "?";
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2)
+            return $"{parts[0][0]}{parts[^1][0]}".ToUpper();
+        return name[0].ToString().ToUpper();
+    }
+
+    private string GetStatusClass(int status) => status switch
+    {
+        0 => "bg-emerald-100 text-emerald-600",
+        1 => "bg-red-100 text-red-600",
+        _ => "bg-gray-100 text-gray-600"
+    };
+
+    private string GetStatusText(int status) => status switch
+    {
+        0 => "Hoạt động",
+        1 => "Đã khóa",
+        _ => "Không xác định"
+    };
+
+    private string GetRoleBadgeClass(string role) => role?.ToLower() switch
+    {
+        "admin" => "bg-purple-100 text-purple-700",
+        "user" => "bg-blue-100 text-blue-700",
+        _ => "bg-gray-100 text-gray-700"
+    };
+
+    private async Task LoadRoles()
+    {
+        var response = await UserService.GetListRoleAsync();
+        if (response.Success)
+        {
+            roles = response.Data;
+        }
+    }
+
+    private async Task OpenAddUserModal()
+    {
+        newUser = new AddUserRequest();
+        selectedRoles = new List<string>();
+        addUserError = string.Empty;
+        showAddUserModal = true;
+        await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.add('modal-open')");
+    }
+
+    private async Task CloseAddUserModal()
+    {
+        showAddUserModal = false;
+        newUser = new AddUserRequest();
+        selectedRoles = new List<string>();
+        addUserError = string.Empty;
+        await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.remove('modal-open')");
+    }
+
+    private void ToggleRole(string roleName)
+    {
+        if (selectedRoles.Contains(roleName))
+        {
+            selectedRoles.Remove(roleName);
+        }
+        else
+        {
+            selectedRoles.Add(roleName);
+        }
+    }
+
+    private async Task AddUserAsync()
+    {
+        if (isAdding) return;
+
+        // Validation
+        addUserError = string.Empty;
+        
+        if (string.IsNullOrWhiteSpace(newUser.FullName))
+        {
+            addUserError = "Vui lòng nhập họ tên";
+            return;
+        }
+        
+        if (string.IsNullOrWhiteSpace(newUser.Username))
+        {
+            addUserError = "Vui lòng nhập tên đăng nhập";
+            return;
+        }
+        
+        if (string.IsNullOrWhiteSpace(newUser.Email))
+        {
+            addUserError = "Vui lòng nhập email";
+            return;
+        }
+        
+        if (string.IsNullOrWhiteSpace(newUser.Phone))
+        {
+            addUserError = "Vui lòng nhập số điện thoại";
+            return;
+        }
+        
+        if (string.IsNullOrWhiteSpace(newUser.Password))
+        {
+            addUserError = "Vui lòng nhập mật khẩu";
+            return;
+        }
+        
+        if (newUser.Password.Length < 6)
+        {
+            addUserError = "Mật khẩu phải có ít nhất 6 ký tự";
+            return;
+        }
+        
+        if (selectedRoles.Count == 0)
+        {
+            addUserError = "Vui lòng chọn ít nhất một vai trò";
+            return;
+        }
+
+        // Thêm roles vào list
+        newUser.Roles = new List<string>(selectedRoles);
+
+        isAdding = true;
+        StateHasChanged();
+        
+        var result = await UserService.AddUserAsync(newUser);
+        
+        if (result.Success)
+        {
+            Toast.Success(result.Message);
+            await CloseAddUserModal();
+            
+            // Reset về trang 1 và reload
+            currentPage = 1;
+            await LoadUsers();
+            StateHasChanged();
+        }
+        else
+        {
+            addUserError = result.Message;
+        }
+        
+        isAdding = false;
+        StateHasChanged();
+    }
+
+    private async Task OpenEditModal(GetListUserRes user)
+    {
+        editUser = new UpdateUserRequest
+        {
+            UserID = user.Id,
+            FullName = user.UserName,
+            Username = user.UserName,
+            Email = user.Email,
+            Phone = user.PhoneNumber,
+            DateOfBirth = user.DateOfBirth ?? DateTime.Now,
+            Status = user.Status,
+            Password = null
+        };
+        
+        // Parse roles từ RoleName (có thể là "Admin, User" hoặc "Admin")
+        editSelectedRoles = user.RoleName.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(r => r.Trim())
+            .ToList();
+        
+        editUserError = string.Empty;
+        showEditUserModal = true;
+        await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.add('modal-open')");
+    }
+
+    private async Task CloseEditUserModal()
+    {
+        showEditUserModal = false;
+        editUser = null;
+        editSelectedRoles = new List<string>();
+        editUserError = string.Empty;
+        await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.remove('modal-open')");
+    }
+
+    private void ToggleEditRole(string roleName)
+    {
+        if (editSelectedRoles.Contains(roleName))
+        {
+            editSelectedRoles.Remove(roleName);
+        }
+        else
+        {
+            editSelectedRoles.Add(roleName);
+        }
+    }
+
+    private async Task UpdateUserAsync()
+    {
+        if (isEditing || editUser == null) return;
+
+        // Validation
+        editUserError = string.Empty;
+        
+        if (string.IsNullOrWhiteSpace(editUser.FullName))
+        {
+            editUserError = "Vui lòng nhập họ tên";
+            return;
+        }
+        
+        if (string.IsNullOrWhiteSpace(editUser.Username))
+        {
+            editUserError = "Vui lòng nhập tên đăng nhập";
+            return;
+        }
+        
+        if (string.IsNullOrWhiteSpace(editUser.Email))
+        {
+            editUserError = "Vui lòng nhập email";
+            return;
+        }
+        
+        if (string.IsNullOrWhiteSpace(editUser.Phone))
+        {
+            editUserError = "Vui lòng nhập số điện thoại";
+            return;
+        }
+        
+        // Validate password if it's being changed
+        if (!string.IsNullOrWhiteSpace(editUser.Password) && editUser.Password.Length < 6)
+        {
+            editUserError = "Mật khẩu phải có ít nhất 6 ký tự";
+            return;
+        }
+        
+        if (editSelectedRoles.Count == 0)
+        {
+            editUserError = "Vui lòng chọn ít nhất một vai trò";
+            return;
+        }
+
+        // Thêm roles vào list
+        editUser.Roles = new List<string>(editSelectedRoles);
+
+        isEditing = true;
+        StateHasChanged();
+        
+        var result = await UserService.UpdateUserAsync(editUser);
+        
+        if (result.Success)
+        {
+            Toast.Success(result.Message);
+            await CloseEditUserModal();
+            await LoadUsers();
+            StateHasChanged();
+        }
+        else
+        {
+            editUserError = result.Message;
+        }
+        
+        isEditing = false;
+        StateHasChanged();
+    }
+}

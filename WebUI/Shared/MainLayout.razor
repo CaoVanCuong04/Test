@@ -1,0 +1,54 @@
+@inherits LayoutComponentBase
+@using WebUI.Components
+@using WebUI.Services
+@using WebUI.Services.Interfaces
+@inject ILoadingService LoadingService
+@inject IAuthService AuthService
+@inject IToastService ToastService
+@implements IDisposable
+
+<div class="page">
+    <TopBar />
+    <Header />
+    <BrandSlider />
+
+    <main>
+        @Body
+    </main>
+
+    <Footer />
+</div>
+
+<ToastNotification @ref="toastNotification" />
+
+<!-- Global Loading Spinner -->
+<LoadingSpinner 
+    IsVisible="LoadingService.IsLoading"
+    Title="LoadingService.Title"
+    Message="LoadingService.Message"
+    IconClass="LoadingService.IconClass"
+    ShowProgress="LoadingService.ShowProgress"
+    ProgressValue="LoadingService.ProgressValue" />
+
+@code {
+    private ToastNotification? toastNotification;
+
+    protected override async Task OnInitializedAsync()
+    {
+        LoadingService.OnStateChanged += StateHasChanged;
+        await AuthService.InitializeAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && toastNotification != null)
+        {
+            ToastService.RegisterToast(toastNotification);
+        }
+    }
+
+    public void Dispose()
+    {
+        LoadingService.OnStateChanged -= StateHasChanged;
+    }
+}
